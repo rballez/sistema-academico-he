@@ -1,0 +1,94 @@
+{
+  "name": "hospital-escandon-academico",
+  "version": "1.0.0",
+  "description": "Sistema de Gestión Académica — Hospital Escandón",
+  "main": "app/main.js",
+  "author": "Hospital Escandón — Departamento de Enseñanza",
+  "license": "GPL-3.0",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build:py": "bash scripts/build-python.sh",
+    "build:py:win": "scripts\\build-python.bat",
+    "build": "npm run build:py && electron-builder",
+    "build:mac": "npm run build:py && electron-builder --mac",
+    "build:win": "npm run build:py:win && electron-builder --win",
+    "build:linux": "npm run build:py && electron-builder --linux",
+    "build:electron": "electron-builder",
+    "build:electron:mac": "electron-builder --mac",
+    "build:electron:win": "electron-builder --win",
+    "build:electron:linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "electron": "^29.0.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "mx.hospitalEscandon.academico",
+    "productName": "HE Académico",
+    "copyright": "Copyright © 2026 Hospital Escandón",
+    "icon": "assets/icons/icon",
+    "asar": true,
+    "files": [
+      "app/**/*",
+      "assets/**/*",
+      "db/**/*",
+      "!python/**/*",
+      "!python-dist/**/*",
+      "!node_modules/**/*",
+      "!**/__pycache__/**/*",
+      "!**/*.pyc"
+    ],
+    "extraResources": [
+      {
+        "from": "python-dist/server",
+        "to": "python-dist/server",
+        "filter": ["**/*"]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.education",
+      "icon": "assets/icons/icon.icns",
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
+    },
+    "win": {
+      "icon": "assets/icons/icon.ico",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "HE Académico"
+    },
+    "linux": {
+      "icon": "assets/icons/icon.png",
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] }
+      ],
+      "category": "Education"
+    },
+    "dmg": {
+      "title": "HE Académico ${version}",
+      "contents": [
+        { "x": 130, "y": 220 },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ]
+    },
+    "publish": null
+  }
+}

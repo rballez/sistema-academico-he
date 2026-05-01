@@ -1,0 +1,155 @@
+name: Build — macOS / Windows / Linux
+
+on:
+  push:
+    tags:
+      - 'v*'          # Se activa al crear un tag como v1.0.0
+  workflow_dispatch:  # También se puede ejecutar manualmente desde GitHub
+
+permissions:
+  contents: write   # Necesario para crear el Release y subir assets
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # BUILD MATRIX: corre en paralelo en los tres sistemas operativos
+  # ─────────────────────────────────────────────────────────────────────────────
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: macOS
+            electron_args: --mac
+          - os: windows-latest
+            label: Windows
+            electron_args: --win
+          - os: ubuntu-latest
+            label: Linux
+            electron_args: --linux
+
+    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.label }})
+
+    steps:
+      # ── 1. Código fuente ────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Python ───────────────────────────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies + PyInstaller
+        run: |
+          pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      # ── 3. PyInstaller → genera python-dist/server/ ─────────────────────────
+      - name: Build Python executable
+        run: pyinstaller server.spec --distpath python-dist --noconfirm
+
+      # Verificar que el ejecutable exista
+      - name: Verify Python executable (Unix)
+        if: runner.os != 'Windows'
+        run: ls -lh python-dist/server/server
+
+      - name: Verify Python executable (Windows)
+        if: runner.os == 'Windows'
+        run: dir python-dist\server\server.exe
+
+      # ── 4. Node.js ──────────────────────────────────────────────────────────
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      # ── 5. Íconos (conversión automática si faltan .icns / .ico) ────────────
+      # Si ya tienes icon.icns e icon.ico en assets/icons/, puedes borrar este paso.
+      - name: Install icon tools (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          if [ ! -f assets/icons/icon.icns ]; then
+            echo "Convirtiendo PNG → ICNS…"
+            mkdir -p tmp_icon.iconset
+            sips -z 16 16     assets/icons/icon.png --out tmp_icon.iconset/icon_16x16.png
+            sips -z 32 32     assets/icons/icon.png --out tmp_icon.iconset/icon_16x16@2x.png
+            sips -z 32 32     assets/icons/icon.png --out tmp_icon.iconset/icon_32x32.png
+            sips -z 64 64     assets/icons/icon.png --out tmp_icon.iconset/icon_32x32@2x.png
+            sips -z 128 128   assets/icons/icon.png --out tmp_icon.iconset/icon_128x128.png
+            sips -z 256 256   assets/icons/icon.png --out tmp_icon.iconset/icon_128x128@2x.png
+            sips -z 256 256   assets/icons/icon.png --out tmp_icon.iconset/icon_256x256.png
+            sips -z 512 512   assets/icons/icon.png --out tmp_icon.iconset/icon_256x256@2x.png
+            sips -z 512 512   assets/icons/icon.png --out tmp_icon.iconset/icon_512x512.png
+            sips -z 1024 1024 assets/icons/icon.png --out tmp_icon.iconset/icon_512x512@2x.png
+            iconutil -c icns tmp_icon.iconset -o assets/icons/icon.icns
+          fi
+
+      - name: Install icon tools (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          if (-not (Test-Path assets\icons\icon.ico)) {
+            pip install pillow
+            python -c "
+          from PIL import Image
+          img = Image.open('assets/icons/icon.png')
+          img.save('assets/icons/icon.ico', format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
+          "
+          }
+        shell: pwsh
+
+      # ── 6. electron-builder ──────────────────────────────────────────────────
+      - name: Build Electron app
+        env:
+          # Para firmar en macOS agrega: APPLE_ID, APPLE_ID_PASSWORD, APPLE_TEAM_ID
+          # Para firmar en Windows agrega: CSC_LINK, CSC_KEY_PASSWORD
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder ${{ matrix.electron_args }} --publish never
+
+      # ── 7. Subir instaladores como artifacts ─────────────────────────────────
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: HE-Academico-${{ matrix.label }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.deb
+          retention-days: 30
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # RELEASE: crea el Release de GitHub y adjunta todos los instaladores
+  # (solo cuando el trigger es un tag v*)
+  # ─────────────────────────────────────────────────────────────────────────────
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    name: Publish Release
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-files
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "HE Académico ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
+          files: release-files/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="oscuro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HE Académico — Hospital Escandón</title>
+<link rel="stylesheet" href="styles.css">
+<script src="../assets/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- PANTALLA DE BLOQUEO (CONTRASEÑA) -->
+<div id="auth-screen" style="position:fixed; top:0; left:0; width:100%; height:100%; background:var(--bg); z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+  <div class="card" style="width:400px; text-align:center; padding:40px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+    <img src="../assets/logos/hospital_escandon.png" style="width:100px; margin-bottom:20px;" onerror="this.style.display='none'">
+    <h2 style="margin-bottom:24px; color:var(--text);">Seguridad del Sistema</h2>
+    <div id="auth-setup" style="display:none;">
+       <p class="text-sm text-muted" style="margin-bottom:16px;">Crea una contraseña maestra para proteger el sistema.</p>
+       <input type="password" id="auth-new-pwd" class="form-control" style="margin-bottom:12px;" placeholder="Nueva Contraseña">
+       <input type="password" id="auth-new-pwd-conf" class="form-control" style="margin-bottom:24px;" placeholder="Reingrese Contraseña">
+       <button class="btn btn-primary" style="width:100%;" onclick="setupPassword()">Guardar y Entrar</button>
+    </div>
+    <div id="auth-login" style="display:none;">
+       <p class="text-sm text-muted" style="margin-bottom:16px;">Ingrese su contraseña para desbloquear.</p>
+       <input type="password" id="auth-pwd" class="form-control" style="margin-bottom:24px;" placeholder="Contraseña" onkeypress="if(event.key==='Enter') loginApp()">
+       <button class="btn btn-primary" style="width:100%;" onclick="loginApp()">Desbloquear</button>
+       <p class="text-sm" style="color:var(--danger); margin-top:12px; height:20px;" id="auth-error"></p>
+    </div>
+  </div>
+</div>
+
+<div class="progress-bar-wrap" id="progress-bar"><div class="progress-bar-inner" id="progress-inner" style="width:0%"></div></div>
+<div id="toast-container"></div>
+<div class="toast-persistent hidden" id="warning-alumnos" onclick="goTo('alumnos')">⚠️ Faltan alumnos del nuevo ciclo — Click para agregar</div>
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <img src="../assets/logos/hospital_escandon.png" id="logo-img" onerror="this.style.display='none'" alt="HE">
+    <div class="sidebar-logo-text"><strong>H. Escandón</strong><span>Gestión Académica</span></div>
+  </div>
+  <div class="sidebar-cycle" id="sidebar-cycle">Ciclo: —</div>
+  <ul class="sidebar-nav" id="nav">
+    <li class="active"><a href="#" data-section="inicio"        data-title="Inicio">        <span class="nav-icon">🏠</span>Inicio</a></li>
+    <li><a href="#" data-section="alumnos"       data-title="Alumnos">       <span class="nav-icon">👥</span>Alumnos<span class="badge" id="badge-dup">!</span></a></li>
+    <li><a href="#" data-section="escuelas"      data-title="Escuelas">      <span class="nav-icon">🏫</span>Escuelas</a></li>
+    <li><a href="#" data-section="rotaciones"    data-title="Rotaciones">    <span class="nav-icon">🔄</span>Rotaciones</a></li>
+    <li><a href="#" data-section="examenes"      data-title="Exámenes">      <span class="nav-icon">📝</span>Exámenes</a></li>
+    <li><a href="#" data-section="calificaciones" data-title="Calificaciones"><span class="nav-icon">📊</span>Calificaciones</a></li>
+    <li><a href="#" data-section="opciones"      data-title="Opciones">      <span class="nav-icon">⚙️</span>Opciones</a></li>
+  </ul>
+</aside>
+
+<div class="main-area">
+  <div class="topbar"><div class="topbar-title" id="topbar-title">Inicio</div><div class="topbar-actions" id="topbar-actions"></div></div>
+  <div class="content-area">
+
+    <!-- INICIO -->
+    <section class="section active" id="sec-inicio">
+      <div class="welcome-hero">
+        <img src="../assets/logos/hospital_escandon.png" onerror="this.style.display='none'">
+        <h1>Bienvenido al Sistema Académico</h1>
+        <p>Hospital Escandón · Departamento de Enseñanza · <span id="ciclo-hero">—</span></p>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-num" id="stat-mip1">0</div><div class="stat-label">MIP 1</div></div>
+        <div class="stat-card"><div class="stat-num" id="stat-mip2">0</div><div class="stat-label">MIP 2</div></div>
+        <div class="stat-card"><div class="stat-num" id="stat-total">0</div><div class="stat-label">Total alumnos</div></div>
+        <div class="stat-card"><div class="stat-num" id="stat-escuelas">0</div><div class="stat-label">Escuelas</div></div>
+      </div>
+      <div class="steps-grid">
+        <div class="step-card" onclick="goTo('alumnos')"><div class="step-num">1</div><h3>Agregar Alumnos</h3><p>Agrega alumnos o importa un CSV masivo.</p></div>
+        <div class="step-card" onclick="goTo('examenes')"><div class="step-num">2</div><h3>Generar Hojas</h3><p>Crea PDFs de examen o rotación con ID.</p></div>
+        <div class="step-card" onclick="goTo('calificaciones')"><div class="step-num">3</div><h3>Evaluar y Promediar</h3><p>Procesa CSVs de ZipGrade. El sistema calcula todo.</p></div>
+      </div>
+    </section>
+
+    <!-- ALUMNOS -->
+    <section class="section" id="sec-alumnos">
+      <div class="tab-group"><button class="tab-btn active" data-tab="activos" onclick="switchAlumnoTab(this,'activos')">Activos</button><button class="tab-btn" data-tab="egresados" onclick="switchAlumnoTab(this,'egresados')">Egresados</button></div>
+      <div id="tab-activos">
+        <div class="section-header">
+          <div class="filters-bar">
+            <!-- BUSCADOR CON X -->
+            <div style="position:relative; width:220px;">
+              <span class="search-icon" style="position:absolute; left:8px; top:50%; transform:translateY(-50%);">🔍</span>
+              <input id="search-alumnos" placeholder="Buscar alumno..." oninput="filtrarAlumnos()" class="form-control" style="padding-left:30px; padding-right:24px; width:100%;">
+              <span style="position:absolute; right:8px; top:50%; transform:translateY(-50%); cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('search-alumnos').value=''; filtrarAlumnos();">✕</span>
+            </div>
+            <select class="form-control" style="width:150px" id="filter-grado" onchange="filtrarAlumnos()"><option value="">Todos</option><option>MIP 1</option><option>MIP 2</option></select>
+            <select class="form-control" style="width:180px" id="filter-escuela-al" onchange="filtrarAlumnos()"><option value="">Todas las escuelas</option></select>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-success btn-sm" onclick="openModalExportarLista()">⬇ Exportar Lista</button>
+            <button class="btn btn-ghost btn-sm" onclick="descargarEjemploAlumnos()">⬇ CSV ejemplo</button>
+            <button class="btn btn-ghost btn-sm" onclick="abrirModalCodigos()">💡 Códigos</button>
+            <button class="btn btn-ghost btn-sm" onclick="openImportAlumnos()">📂 Importar CSV</button>
+            <button class="btn btn-primary" onclick="openModalAlumno()">+ Agregar alumno</button>
+          </div>
+        </div>
+        <div class="card table-wrap"><table id="tabla-alumnos"><thead><tr><th>MIP ID</th><th>Nombre</th><th>Universidad</th><th>Grado</th><th>Ciclo</th><th>Acciones</th></tr></thead><tbody id="tbody-alumnos"></tbody></table></div>
+      </div>
+      <div id="tab-egresados" style="display:none">
+        <div class="section-header"><select class="form-control" style="width:180px" id="filter-ciclo-eg" onchange="cargarEgresados()"><option value="">Todos los ciclos</option></select></div>
+        <div class="card table-wrap"><table id="tabla-egresados"><thead><tr><th>MIP ID</th><th>Nombre</th><th>Universidad</th><th>Ciclo Egreso</th></tr></thead><tbody id="tbody-egresados"></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- ESCUELAS -->
+    <section class="section" id="sec-escuelas">
+      <div class="section-header"><h2>Escuelas</h2><button class="btn btn-ghost btn-sm" id="btn-back-escuela" onclick="mostrarEscuelas()" style="display:none">← Volver</button></div>
+      <div id="schools-grid-view"><div class="schools-grid" id="schools-grid"></div></div>
+      <div id="school-detail-view" style="display:none">
+        <div class="card"><div class="card-title" id="school-detail-title" style="color:var(--text)"></div><div class="table-wrap"><table><thead><tr><th>MIP ID</th><th>Nombre</th><th>Grado</th></tr></thead><tbody id="tbody-school-detail"></tbody></table></div></div>
+      </div>
+    </section>
+
+    <!-- ROTACIONES -->
+    <section class="section" id="sec-rotaciones">
+      <div class="tab-group"><button class="tab-btn active" onclick="switchTab(this,'rot-generar')">📄 Generar Hojas</button><button class="tab-btn" onclick="switchTab(this,'rot-importar')">📂 Importar evaluaciones</button><button class="tab-btn" onclick="switchTab(this,'rot-calificaciones')">📊 Calificaciones</button><button class="tab-btn btn-ghost" onclick="abrirModalManual('rotacion')">✍️ Registro Manual</button></div>
+      
+      <div id="tab-rot-generar" class="tab-panel">
+        <div class="card">
+          <div class="card-title">Generar Hojas de Rotación</div>
+          <div class="form-row"><div class="form-group"><label class="form-label">Filtrar por</label><select class="form-control" id="rot-gen-grado"><option value="">Todos los alumnos</option><option value="MIP 1">Solo MIP 1</option><option value="MIP 2">Solo MIP 2</option><option value="guardia">Por guardia (CSV)</option></select></div><div class="form-group" id="rot-csv-guardia-wrap" style="display:none"><label class="form-label">CSV de guardia</label><button class="btn btn-ghost" onclick="cargarCsvGuardia('rot')">📂 Cargar CSV</button><div class="text-sm text-muted mt-1" id="rot-guardia-filename"></div></div></div>
+          <div class="form-group" style="margin-top: 14px;"><label class="form-label">Carpeta de salida (Opcional)</label><div style="display:flex;gap:8px"><input type="text" class="form-control" id="rot-out-dir" placeholder="Escritorio por defecto" readonly><button class="btn btn-ghost" onclick="seleccionarCarpeta('rot-out-dir')">📁 Cambiar</button></div></div>
+          <div style="display:flex;gap:8px;margin-top:16px"><button class="btn btn-primary" onclick="generarHojasRotacion()">🖨 Generar PDFs</button></div>
+        </div>
+      </div>
+      
+      <div id="tab-rot-importar" class="tab-panel" style="display:none">
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center;"><div class="card-title" style="margin-bottom:0;">Importar CSV de ZipGrade — Rotaciones</div></div>
+          <div class="drop-zone" onclick="importarCSVRotaciones()"><div class="drop-icon">📁</div><p><strong>Haz clic para seleccionar EVAL.csv</strong><br>C=Cirugía, M=MI, U=Urgencias, P=Pediatría, F=Familiar, G=GyO</p></div>
+          <div id="rot-import-result" style="margin-top:12px"></div>
+        </div>
+        <div id="duplicados-panel" style="display:none"><div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;"><div class="card-title" style="margin-bottom:0;">⚠️ Duplicados pendientes</div><button class="btn btn-ghost btn-sm" onclick="cargarAlertasDuplicados()">🔄 Refrescar</button></div><div id="duplicados-list"></div></div></div>
+      </div>
+
+      <div id="tab-rot-calificaciones" class="tab-panel" style="display:none">
+        <div class="section-header">
+          <div class="tab-group"><button class="tab-btn active" onclick="filtrarTablaRot('', this)">Todos</button><button class="tab-btn" onclick="filtrarTablaRot('MIP 1', this)">MIP 1</button><button class="tab-btn" onclick="filtrarTablaRot('MIP 2', this)">MIP 2</button></div>
+          <button class="btn btn-success btn-sm" onclick="exportarExcel('global')">⬇ Excel</button>
+        </div>
+        <div class="card table-wrap"><table id="tabla-rot-cal"><thead><tr><th>Nombre</th><th>ID</th><th>Grado</th><th>GyO</th><th>MI</th><th>Cirugía</th><th>Pediatría</th><th>Familiar</th><th>Urgencias</th></tr></thead><tbody id="tbody-rot-cal"></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- EXÁMENES -->
+    <section class="section" id="sec-examenes">
+      <div class="tab-group"><button class="tab-btn active" onclick="switchTab(this,'exam-generar')">📄 Generar Hojas</button><button class="tab-btn" onclick="switchTab(this,'exam-importar')">📂 Importar calificación</button><button class="tab-btn" onclick="switchTab(this,'exam-resultados')">📊 Resultados</button><button class="tab-btn btn-ghost" onclick="abrirModalManual('examen')">✍️ Registro Manual</button></div>
+      
+      <div id="tab-exam-generar" class="tab-panel">
+        <div class="card">
+          <div class="card-title">Generar Hojas de Examen</div>
+          <div class="form-row"><div class="form-group"><label class="form-label">Filtrar por</label><select class="form-control" id="exam-gen-grado"><option value="">Todos</option><option value="MIP 1">Solo MIP 1</option><option value="MIP 2">Solo MIP 2</option><option value="guardia">Por guardia (CSV)</option></select></div><div class="form-group" id="exam-csv-guardia-wrap" style="display:none"><label class="form-label">CSV de guardia</label><button class="btn btn-ghost" onclick="cargarCsvGuardia('exam')">📂 Cargar CSV</button><div class="text-sm text-muted mt-1" id="exam-guardia-filename"></div></div></div>
+          <div class="form-group" style="margin-top: 14px;"><label class="form-label">Carpeta de salida (Opcional)</label><div style="display:flex;gap:8px"><input type="text" class="form-control" id="exam-out-dir" placeholder="Escritorio por defecto" readonly><button class="btn btn-ghost" onclick="seleccionarCarpeta('exam-out-dir')">📁 Cambiar</button></div></div>
+          <div style="display:flex;gap:8px;margin-top:16px"><button class="btn btn-ghost btn-sm" onclick="descargarEjemploGuardias()">⬇ CSV ejemplo</button><button class="btn btn-primary" onclick="generarHojasExamen()">🖨 Generar PDFs</button></div>
+        </div>
+      </div>
+
+      <div id="tab-exam-importar" class="tab-panel" style="display:none">
+        <div class="card" id="card-upload-exam">
+          <div style="display:flex; justify-content:space-between; align-items:center;"><div class="card-title" style="margin-bottom:0;">Pizarrón de Previsualización (Exámenes)</div><button class="btn btn-gold btn-sm" onclick="abrirModalCampana('examen')">🔔 Aplicar Campana</button></div>
+          <p class="text-muted text-sm" style="margin-top:8px; margin-bottom:14px">Selecciona tu CSV. Podrás ajustar puntos manuales o grupales (+/-) <strong>antes</strong> de guardarlos.</p>
+          <div class="form-row" style="margin-bottom:14px">
+            <div class="form-group"><label class="form-label">Materia</label><select class="form-control" id="exam-import-materia" onchange="onMateriaCambio()"><option value="Cirugía">Cirugía</option><option value="Medicina Interna">Medicina Interna</option><option value="Pediatría">Pediatría</option><option value="GyO">GyO</option><option value="Urg-Fam">Urgencias - Familiar</option><option value="Troncal">Troncal (Aplica a todas)</option></select></div>
+            <div class="form-group"><label class="form-label">Tipo de examen</label><select class="form-control" id="exam-import-tipo"><option value="parcial">Parcial</option><option value="final">Final</option><option value="remedial">Remedial</option></select></div>
+          </div>
+          <div class="drop-zone" onclick="importarCSVExamenPreview()"><div class="drop-icon">📁</div><p><strong>Haz clic para Cargar el CSV y Previsualizar</strong></p></div>
+        </div>
+        <div class="card" id="card-preview-exam" style="display:none; margin-top:16px; border-color:var(--primary);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div class="card-title" style="margin:0;">👀 Vista Previa de Asignación</div>
+            <div style="display:flex; gap:10px; align-items:center;"><span class="text-sm text-muted">Ajuste Global (+/-)</span><input type="number" id="preview-global-extra" class="form-control" style="width:70px;" value="0" step="0.1"><button class="btn btn-ghost btn-sm" onclick="aplicarExtraGlobalPreview()">Aplicar a Todos</button></div>
+          </div>
+          <div class="table-wrap" style="max-height:400px; overflow-y:auto;"><table><thead><tr><th>ID</th><th>Nombre</th><th>Grado</th><th>Cal. Base</th><th>Ajuste Ind.</th><th>Total (Máx 100)</th></tr></thead><tbody id="tbody-preview-exam"></tbody></table></div>
+          <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;"><button class="btn btn-ghost" onclick="cancelarPreview()">Cancelar</button><button class="btn btn-primary" onclick="confirmarYGuardarLote()">✅ Confirmar y Guardar Todo</button></div>
+        </div>
+      </div>
+
+      <div id="tab-exam-resultados" class="tab-panel" style="display:none">
+        <div class="filters-bar" style="margin-bottom:14px">
+          <select class="form-control" style="width:160px" id="exam-res-materia" onchange="cargarResultadosExamen()"><option value="Cirugía">Cirugía</option><option value="Medicina Interna">Medicina Interna</option><option value="Pediatría">Pediatría</option><option value="GyO">GyO</option><option value="Urg-Fam">Urgencias - Familiar</option><option value="Troncal">Troncal</option></select>
+          <select class="form-control" style="width:130px" id="exam-res-tipo" onchange="cargarResultadosExamen()"><option value="parcial">Parcial</option><option value="final">Final</option><option value="remedial">Remedial</option><option value="troncal">Troncal</option></select>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-success btn-sm" onclick="exportarResultadosExamen()">⬇ Descargar Excel</button>
+          </div>
+        </div>
+        <div class="tab-group" style="margin-bottom:14px;">
+          <button class="tab-btn active" onclick="switchResultadosTab('MIP 1', this)">MIP 1</button>
+          <button class="tab-btn" onclick="switchResultadosTab('MIP 2', this)">MIP 2</button>
+        </div>
+        <div class="card table-wrap" style="max-width:800px;">
+          <table><thead><tr><th>#</th><th>Nombre</th><th>Escuela</th><th id="th-res-mip1" style="cursor:pointer;user-select:none;" onclick="sortResultados('mip1')">MIP 1 <span id="sort-icon-mip1">⇅</span></th><th id="th-res-mip2" style="cursor:pointer;user-select:none;" onclick="sortResultados('mip2')">MIP 2 <span id="sort-icon-mip2">⇅</span></th></tr></thead><tbody id="tbody-resultados-exam"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- CALIFICACIONES GLOBALES Y MEGA TABLA UNIFICADA -->
+    <section class="section" id="sec-calificaciones">
+      <!-- HEADER COMPARTIDO -->
+      <div class="section-header" style="flex-wrap: wrap; gap:14px; margin-bottom:10px; border-bottom:1px solid var(--border); padding-bottom:14px;">
+          <div class="tab-group" style="margin:0;">
+            <button class="tab-btn active" onclick="switchTab(this,'cal-global')">📋 Global</button>
+            <button class="tab-btn" onclick="switchTab(this,'cal-vista-examenes'); cargarVistaGlobalExamenes();">📝 Examenes totales</button>
+            <button class="tab-btn" onclick="switchTab(this,'cal-estadisticas'); cargarGraficosExamen();">📊 Gráficas</button>
+          </div>
+          
+          <div class="filters-bar" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+            <div class="tab-group" style="margin:0;">
+              <button class="tab-btn active" onclick="filtrarCalGlobal('', this)">Todos</button>
+              <button class="tab-btn" onclick="filtrarCalGlobal('MIP 1', this)">MIP 1</button>
+              <button class="tab-btn" onclick="filtrarCalGlobal('MIP 2', this)">MIP 2</button>
+            </div>
+            
+            <label style="cursor:pointer; display:flex; align-items:center; gap:4px; margin-left:10px;"><input type="checkbox" id="check-troncal" checked onchange="cargarTablaGlobal()"> <span class="text-sm text-muted">Troncal</span></label>
+            <label style="cursor:pointer; display:flex; align-items:center; gap:4px;"><input type="checkbox" id="check-remedial" checked onchange="cargarTablaGlobal()"> <span class="text-sm text-muted">Remedial</span></label>
+            
+            <!-- BUSCADOR CON X EN CALIFICACIONES -->
+            <div style="position:relative; width:220px; margin-left:10px;">
+              <span class="search-icon" style="position:absolute; left:8px; top:50%; transform:translateY(-50%);">🔍</span>
+              <input id="search-cal" placeholder="Buscar alumno..." oninput="renderTablasCalificaciones()" class="form-control" style="padding-left:30px; padding-right:24px; width:100%;">
+              <span style="position:absolute; right:8px; top:50%; transform:translateY(-50%); cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('search-cal').value=''; renderTablasCalificaciones();">✕</span>
+            </div>
+            <select class="form-control" style="width:160px" id="filter-escuela-cal" onchange="renderTablasCalificaciones()"><option value="">Todas las escuelas</option></select>
+            
+            <button class="btn btn-ghost btn-sm" onclick="recalcularTodo()" title="Recalcular promedios">🔄</button>
+          </div>
+      </div>
+
+      <div id="tab-cal-global" class="tab-panel">
+        <div style="display:flex; justify-content:flex-end; margin-bottom:10px;"><button class="btn btn-success btn-sm" onclick="exportarExcel('global')">⬇ Exportar Global</button></div>
+        <div class="card table-wrap" style="overflow-x:auto"><table id="tabla-cal-global" style="min-width:1100px"><thead id="thead-cal-global"></thead><tbody id="tbody-cal-global"></tbody></table></div>
+      </div>
+
+      <div id="tab-cal-vista-examenes" class="tab-panel" style="display:none">
+        <div style="display:flex; justify-content:flex-end; margin-bottom:10px;"><button class="btn btn-success btn-sm" onclick="exportarVistaGlobalCsv()">⬇ Exportar Mega Excel (CSV)</button></div>
+        <div class="card table-wrap" style="overflow-x:auto; padding:0;">
+          <table id="tabla-mega-examenes" style="min-width:2400px; white-space:nowrap; text-align:center;">
+            <thead id="thead-mega-examenes"></thead><tbody id="tbody-mega-examenes"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="tab-cal-estadisticas" class="tab-panel" style="display:none">
+        <div class="filters-bar" style="margin-bottom:14px; margin-top:10px;">
+          <select class="form-control" style="width:160px" id="cal-exam-materia" onchange="cargarGraficosExamen()"><option value="Cirugía">Cirugía</option><option value="Medicina Interna">Medicina Interna</option><option value="Pediatría">Pediatría</option><option value="GyO">GyO</option><option value="Urg-Fam">Urgencias - Familiar</option></select>
+          <select class="form-control" style="width:130px" id="cal-exam-tipo" onchange="cargarGraficosExamen()"><option value="parcial">Parcial</option><option value="final">Final</option><option value="remedial">Remedial</option></select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div class="card" style="overflow-x:auto;"><div style="min-width:600px; height:300px;"><canvas id="chart-por-universidad"></canvas></div></div>
+          <div class="card"><div style="height:300px;"><canvas id="chart-distribucion"></canvas></div></div>
+        </div>
+        <h3 style="margin-top:24px; margin-bottom:12px; color:var(--text);">🏆 TOP 3 — Mejores Promedios en Exámenes</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div class="card" style="border-top:4px solid var(--primary);"><div class="card-title">🏅 MIP 2</div><div id="top-mip2-list"></div></div>
+          <div class="card" style="border-top:4px solid var(--verde);"><div class="card-title">🏅 MIP 1</div><div id="top-mip1-list"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- OPCIONES -->
+    <section class="section" id="sec-opciones">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <div class="card"><div class="card-title">🎨 Apariencia</div><div class="form-group"><div style="display:flex;gap:10px"><button class="btn btn-ghost" id="btn-tema-oscuro" onclick="setTema('oscuro')">🌙 Oscuro</button><button class="btn btn-ghost" id="btn-tema-claro" onclick="setTema('claro')">☀️ Claro</button></div></div></div>
+          <div class="card"><div class="card-title">📅 Ciclo Actual</div><div class="form-row"><div class="form-group"><input class="form-control" id="ciclo-input" placeholder="ej. 2026-1"></div></div><button class="btn btn-primary" onclick="guardarCiclo()">Guardar ciclo</button></div>
+          <div class="card" style="border-color:var(--danger)"><div class="card-title" style="color:var(--danger)">⚠️ Terminar Curso</div><p class="text-sm text-muted" style="margin-bottom:14px">Promoverá MIP 1 a MIP 2 y guardará los MIP 2 como egresados.</p><div class="form-group"><label class="form-label">Nuevo ciclo</label><input class="form-control" id="nuevo-ciclo-input" placeholder="ej. 2026-2"></div><button class="btn btn-danger" onclick="terminarCurso()">Terminar curso</button></div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <div class="card" style="border-color:var(--gold);">
+            <div class="card-title" style="color:var(--gold);">💾 Herencia del Sistema (Respaldos)</div>
+            <p class="text-sm text-muted" style="margin-bottom:14px;">Utiliza estas herramientas para heredar el sistema al siguiente pasante.</p>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+              <button class="btn btn-primary" onclick="exportarBaseDatos()">📤 Exportar Base de Datos al Escritorio</button>
+              <button class="btn btn-ghost" onclick="importarBaseDatos()" style="border:1px solid var(--border);">📥 Importar "Respaldo_HE_Academico.db"</button>
+              <button class="btn btn-danger mt-2" onclick="wipeDatabase()">☢️ Borrar TODA la información (Dejar de Fábrica)</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<!-- MODALES GENERALES -->
+<div class="modal-overlay" id="modal-alumno"><div class="modal"><div class="modal-header"><div class="modal-title" id="modal-alumno-title">👤 Agregar Alumno</div><button class="btn btn-ghost btn-icon" onclick="closeModal('modal-alumno')">✕</button></div><div class="modal-body"><input type="hidden" id="al-edit-id-old"><div class="form-row"><div class="form-group"><label class="form-label">Paterno *</label><input class="form-control" id="al-paterno"></div><div class="form-group"><label class="form-label">Materno</label><input class="form-control" id="al-materno"></div></div><div class="form-group"><label class="form-label">Nombre(s) *</label><input class="form-control" id="al-nombres"></div><div class="form-row"><div class="form-group"><label class="form-label">Universidad *</label><select class="form-control" id="al-universidad"></select></div><div class="form-group"><label class="form-label">Grado *</label><select class="form-control" id="al-grado"><option value="MIP 1">MIP 1</option><option value="MIP 2">MIP 2</option></select></div></div><div class="form-row"><div class="form-group"><label class="form-label">MIP ID</label><input class="form-control" id="al-mipid" placeholder="En blanco = Auto Macro"></div><div class="form-group"><label class="form-label">Ciclo</label><input class="form-control" id="al-ciclo"></div></div><div id="wrap-egresar" style="display:none; margin-top:16px;"><button class="btn btn-danger btn-sm" onclick="egresarAlumnoIndividual()" style="width:100%">🎓 Marcar como Egresado</button></div></div><div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-alumno')">Cancelar</button><button class="btn btn-primary" onclick="guardarAlumno()">Guardar</button></div></div></div>
+<div class="modal-overlay" id="modal-codigos"><div class="modal" style="max-width:480px;"><div class="modal-header"><div class="modal-title">💡 Códigos de Universidades</div><button class="btn btn-ghost btn-icon" onclick="closeModal('modal-codigos')">✕</button></div><div class="modal-body"><div class="table-wrap"><table style="font-size:12px;"><thead><tr><th>Código</th><th>Universidad</th></tr></thead><tbody id="tbody-codigos"></tbody></table></div></div></div></div>
+<div class="modal-overlay" id="modal-expediente"><div class="modal" style="max-width:580px;"><div class="modal-header"><div class="modal-title">🗂️ Expediente del Alumno</div><button class="btn btn-ghost btn-icon" onclick="closeModal('modal-expediente')">✕</button></div><div class="modal-body"><div class="expediente-header"><img id="exp-foto" src="" onerror="this.src='../assets/logos/hospital_escandon.png'"><div><h2 id="exp-nombre">Nombre</h2><div style="display:flex;gap:8px;margin-top:6px;"><span class="badge-mip1" id="exp-grado"></span><span class="badge-mip2" id="exp-id" style="background:rgba(243,156,18,.15);color:var(--warning);"></span></div></div></div><div class="expediente-info"><p><strong>Universidad:</strong> <span id="exp-univ"></span></p><p><strong>Ciclo de Ingreso:</strong> <span id="exp-ciclo"></span></p></div><hr style="border:0; border-top:1px solid var(--border); margin:16px 0;"><h3 style="font-size:14px; margin-bottom:12px;">🖨️ Acciones Rápidas</h3><div style="display:flex; gap:10px;"><button class="btn btn-primary" id="btn-print-rot">Hoja Rotación</button><button class="btn btn-success" id="btn-print-ex">Hoja Examen</button><button class="btn btn-ghost" onclick="cerrarExpYBuscar()">📊 Ver Calificaciones</button></div></div></div></div>
+<div class="modal-overlay" id="modal-manual"><div class="modal" style="max-width:520px;"><div class="modal-header"><div class="modal-title">✍️ Registro Manual</div><button class="btn btn-ghost btn-icon" onclick="closeModal('modal-manual')">✕</button></div><div class="modal-body"><input type="hidden" id="manual-contexto"><div class="form-group"><label class="form-label">Buscar Alumno *</label><select class="form-control" id="manual-alumno"></select></div><div class="form-row"><div class="form-group"><label class="form-label">Materia *</label><select class="form-control" id="manual-materia"><option value="Cirugía">Cirugía</option><option value="Medicina Interna">Medicina Interna</option><option value="Pediatría">Pediatría</option><option value="GyO">GyO</option><option value="Urgencias">Urgencias</option><option value="Familiar">Familiar</option><option value="Urg-Fam">Urg-Fam (Clona)</option><option value="Troncal">Troncal (Global)</option></select></div><div class="form-group"><label class="form-label">Tipo *</label><select class="form-control" id="manual-tipo"><option value="rotacion">Rotación</option><option value="parcial">Parcial</option><option value="final">Final</option><option value="remedial">Remedial</option><option value="troncal">Troncal Global</option></select></div></div><div class="form-group" style="margin-top:8px;"><label class="form-label">Calificación Final (0-100) *</label><input type="number" class="form-control" id="manual-calificacion" min="0" max="100" step="0.1" style="font-size:16px; font-weight:bold; color:var(--verde);"></div></div><div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-manual')">Cancelar</button><button class="btn btn-primary" onclick="guardarRegistroManual()">Guardar</button></div></div></div>
+<div class="modal-overlay" id="modal-campana"><div class="modal" style="max-width:420px;"><div class="modal-header"><div class="modal-title">🔔 Aplicar Campana</div><button class="btn btn-ghost btn-icon" onclick="closeModal('modal-campana')">✕</button></div><div class="modal-body"><input type="hidden" id="campana-contexto"><div class="form-group"><label class="form-label">Materia</label><select class="form-control" id="campana-materia"><option value="Cirugía">Cirugía</option><option value="Medicina Interna">MI</option><option value="Pediatría">Pediatría</option><option value="GyO">GyO</option><option value="Urgencias">Urgencias</option><option value="Familiar">Familiar</option><option value="Urg-Fam">Urg-Fam</option><option value="Troncal">Troncal</option></select></div><div class="form-group"><label class="form-label">Tipo</label><select class="form-control" id="campana-tipo"><option value="rotacion">Rotación</option><option value="parcial">Parcial</option><option value="final">Final</option><option value="remedial">Remedial</option></select></div><div class="form-group" style="margin-top:12px;"><label class="form-label" style="color:var(--warning);">¿Topar al más alto a?</label><input type="number" class="form-control" id="campana-base" value="100" min="1" max="100" style="font-size:16px; font-weight:bold; color:var(--warning);"></div></div><div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-campana')">Cancelar</button><button class="btn btn-gold" onclick="ejecutarCampana()">Aplicar</button></div></div></div>
+<div class="modal-overlay" id="confirm-overlay"><div class="modal confirm-modal"><div class="modal-body" style="text-align:center"><div class="confirm-icon" id="confirm-icon">⚠️</div><div class="modal-title" id="confirm-title" style="margin-bottom:8px"></div><p class="text-muted" id="confirm-msg"></p></div><div class="modal-footer" style="justify-content:center"><button class="btn btn-ghost" onclick="closeModal('confirm-overlay')">Cancelar</button><button class="btn btn-danger" id="confirm-ok">Confirmar</button></div></div></div>
+
+<!-- MODAL EXPORTAR LISTAS DE ASISTENCIA -->
+<div class="modal-overlay" id="modal-exportar-lista">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-header"><div class="modal-title">⬇ Exportar Lista de Alumnos</div><button class="btn btn-ghost btn-icon" onclick="closeModal('modal-exportar-lista')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Tipo de Formato</label>
+        <select class="form-control" id="exp-lista-tipo">
+          <option value="asistencia">Lista de Asistencia (Con celdas)</option>
+          <option value="simple">Solo Nombres</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Filtrar por Grado</label>
+        <select class="form-control" id="exp-lista-grado">
+          <option value="Todos">Ambos (Separados)</option>
+          <option value="MIP 1">Solo MIP 1</option>
+          <option value="MIP 2">Solo MIP 2</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-exportar-lista')">Cancelar</button>
+      <button class="btn btn-success btn-sm" onclick="ejecutarExportarLista()">⬇ Excel</button>
+      <button class="btn btn-primary btn-sm" onclick="ejecutarExportarListaPDF()">⬇ PDF</button>
+    </div>
+  </div>
+</div>
+
+<script src="renderer.js"></script>
+</body>
+</html>

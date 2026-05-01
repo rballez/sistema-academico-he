@@ -1,0 +1,62 @@
+# ── Dependencias Node ──────────────────────────────────────────────────────────
+node_modules/
+
+# ── Outputs de compilación ─────────────────────────────────────────────────────
+dist/
+build/
+out/
+python-dist/        # ejecutable PyInstaller (se regenera por plataforma)
+
+# ── Python ─────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+venv/
+.venv/
+.venv-build/
+env/
+
+# ── Base de datos y archivos de usuario ────────────────────────────────────────
+*.db
+*.sqlite3
+*.sqlite
+
+# ── Variables de entorno ───────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Sistema operativo ──────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ── Editores e IDEs ────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ── Logs ───────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Archivos de prueba o temporales ────────────────────────────────────────────
+*.csv
+/data/
+/tmp/
+*.bak
