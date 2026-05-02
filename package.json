@@ -19,15 +19,13 @@
     "build:electron:win": "electron-builder --win",
     "build:electron:linux": "electron-builder --linux"
   },
-  "dependencies": {
-    "electron": "^29.0.0"
-  },
   "devDependencies": {
-    "electron-builder": "^24.0.0"
+    "electron": "^41.4.0",
+    "electron-builder": "^26.8.1"
   },
   "build": {
     "appId": "mx.hospitalEscandon.academico",
-    "productName": "HE Académico",
+    "productName": "HE Academico",
     "copyright": "Copyright © 2026 Hospital Escandón",
     "icon": "assets/icons/icon",
     "asar": true,
@@ -45,26 +43,39 @@
       {
         "from": "python-dist/server",
         "to": "python-dist/server",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
+    "afterPack": "./scripts/after-pack.js",
     "mac": {
       "category": "public.app-category.education",
-      "icon": "assets/icons/icon.icns",
       "target": [
-        { "target": "dmg", "arch": ["arm64", "x64"] },
-        { "target": "zip", "arch": ["arm64", "x64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
       ],
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist"
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
     },
     "win": {
-      "icon": "assets/icons/icon.ico",
       "target": [
-        { "target": "nsis", "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "nsis": {
@@ -77,18 +88,37 @@
     "linux": {
       "icon": "assets/icons/icon.png",
       "target": [
-        { "target": "AppImage", "arch": ["x64"] },
-        { "target": "deb", "arch": ["x64"] }
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "category": "Education"
     },
     "dmg": {
       "title": "HE Académico ${version}",
       "contents": [
-        { "x": 130, "y": 220 },
-        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
       ]
     },
     "publish": null
-  }
+  },
+  "productName": "HE Academico"
 }

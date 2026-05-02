@@ -2,17 +2,34 @@
 # =============================================================================
 # scripts/build-python.sh
 # Crea (o reutiliza) un venv, instala dependencias y corre PyInstaller.
+# En macOS también genera icon.icns desde icon.png si no existe.
 # Compatible con macOS, Linux.
 # =============================================================================
 set -e  # salir si cualquier comando falla
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VENV="$ROOT/.venv-build"
+ICON_PNG="$ROOT/assets/icons/icon.png"
+ICON_ICNS="$ROOT/assets/icons/icon.icns"
 
 echo "──────────────────────────────────────────────"
 echo " HE Académico — Build Python (PyInstaller)"
 echo " Directorio: $ROOT"
 echo "──────────────────────────────────────────────"
+
+# ── Generar icon.icns en macOS si no existe ─────────────────────────────────
+if [[ "$(uname)" == "Darwin" ]] && [ ! -f "$ICON_ICNS" ]; then
+  echo "▶ Generando icon.icns desde icon.png …"
+  TMP="$ROOT/tmp_iconset.iconset"
+  mkdir -p "$TMP"
+  for size in 16 32 64 128 256 512; do
+    sips -z $size $size "$ICON_PNG" --out "$TMP/icon_${size}x${size}.png"     > /dev/null
+    sips -z $((size*2)) $((size*2)) "$ICON_PNG" --out "$TMP/icon_${size}x${size}@2x.png" > /dev/null
+  done
+  iconutil -c icns "$TMP" -o "$ICON_ICNS"
+  rm -rf "$TMP"
+  echo "   ✓ icon.icns creado"
+fi
 
 # 1. Crear venv si no existe
 if [ ! -d "$VENV" ]; then

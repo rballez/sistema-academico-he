@@ -12,6 +12,15 @@ const fs    = require('fs');
 const os    = require('os');
 const crypto = require('crypto');
 
+// ── Log de diagnóstico temprano ───────────────────────────────────────────────
+// Escribe en /tmp/he-log.txt para saber si main.js llega a correr en el
+// .app compilado. Se puede borrar cuando la app esté estable.
+try {
+  const _logPath = require('path').join(require('os').tmpdir(), 'he-log.txt');
+  const _logLine = `[${new Date().toISOString()}] main.js cargado. isPackaged=${app.isPackaged ?? '?'} pid=${process.pid}\n`;
+  require('fs').appendFileSync(_logPath, _logLine);
+} catch (_) {}
+
 const IS_DEV  = process.argv.includes('--dev');
 const APP_DIR = path.join(__dirname, '..');
 const PY_DIR  = path.join(APP_DIR, 'python');
