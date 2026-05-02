@@ -60,3 +60,13 @@ yarn-error.log*
 /data/
 /tmp/
 *.bak
+
+# ── Debug / diagnóstico temporal ───────────────────────────────────────────────
+DEBUG_CONTEXT.md
+
+# ── Electron build helpers temporales ─────────────────────────────────────────
+scripts/after-sign.js
+
+# ── Electron artifacts ────────────────────────────────────────────────────────
+*.dmg
+*.blockmap
