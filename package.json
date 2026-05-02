@@ -2,43 +2,64 @@
   "name": "hospital-escandon-academico",
   "version": "1.0.0",
   "description": "Sistema de Gestión Académica — Hospital Escandón",
+  "homepage": "https://github.com/rballez/sistema-academico-he",
   "main": "app/main.js",
-  "author": "Hospital Escandón — Departamento de Enseñanza",
+
+  "author": {
+    "name": "Roberto Ballesteros",
+    "email": "rballezamora@gmail.com"
+  },
+
   "license": "GPL-3.0",
+
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+
     "build:py": "bash scripts/build-python.sh",
     "build:py:win": "scripts\\build-python.bat",
+
     "build": "npm run build:py && electron-builder",
+
     "build:mac": "npm run build:py && electron-builder --mac",
     "build:win": "npm run build:py:win && electron-builder --win",
     "build:linux": "npm run build:py && electron-builder --linux",
+
     "build:electron": "electron-builder",
     "build:electron:mac": "electron-builder --mac",
     "build:electron:win": "electron-builder --win",
     "build:electron:linux": "electron-builder --linux"
   },
+
   "devDependencies": {
     "electron": "^41.4.0",
     "electron-builder": "^26.8.1"
   },
+
   "build": {
     "appId": "mx.hospitalEscandon.academico",
+
     "productName": "HE Academico",
+
     "copyright": "Copyright © 2026 Hospital Escandón",
+
     "icon": "assets/icons/icon",
+
     "asar": true,
+
     "files": [
       "app/**/*",
       "assets/**/*",
       "db/**/*",
+
       "!python/**/*",
       "!python-dist/**/*",
       "!node_modules/**/*",
+
       "!**/__pycache__/**/*",
       "!**/*.pyc"
     ],
+
     "extraResources": [
       {
         "from": "python-dist/server",
@@ -48,9 +69,12 @@
         ]
       }
     ],
+
     "afterPack": "./scripts/after-pack.js",
+
     "mac": {
       "category": "public.app-category.education",
+
       "target": [
         {
           "target": "dmg",
@@ -59,9 +83,11 @@
           ]
         }
       ],
+
       "hardenedRuntime": false,
       "gatekeeperAssess": false
     },
+
     "win": {
       "target": [
         {
@@ -78,15 +104,20 @@
         }
       ]
     },
+
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
+
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "HE Académico"
+
+      "shortcutName": "HE Academico"
     },
+
     "linux": {
       "icon": "assets/icons/icon.png",
+
       "target": [
         {
           "target": "AppImage",
@@ -101,10 +132,15 @@
           ]
         }
       ],
-      "category": "Education"
+
+      "category": "Education",
+
+      "maintainer": "Roberto Ballesteros <rballezamora@gmail.com>"
     },
+
     "dmg": {
-      "title": "HE Académico ${version}",
+      "title": "HE Academico ${version}",
+
       "contents": [
         {
           "x": 130,
@@ -118,7 +154,9 @@
         }
       ]
     },
+
     "publish": null
   },
+
   "productName": "HE Academico"
 }
