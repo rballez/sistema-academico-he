@@ -86,7 +86,12 @@ function startPython() {
 
   pyProcess = spawn(pyCmd, pyArgs, {
     cwd: pyCwd,
-    env: { ...process.env, HE_DB_PATH: path.join(DB_DIR, 'academico.db') },
+    env: {
+      ...process.env,
+      HE_DB_PATH:   path.join(DB_DIR, 'academico.db'),
+      PYTHONUTF8:   '1',   // Fuerza UTF-8 en Python en Windows (PEP 540)
+      PYTHONIOENCODING: 'utf-8',  // Compatibilidad con Python < 3.7
+    },
   });
 
   let buffer = '';

@@ -1,6 +1,6 @@
 {
   "name": "hospital-escandon-academico",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Sistema de Gestión Académica — Hospital Escandón",
   "homepage": "https://github.com/rballez/sistema-academico-he",
   "main": "app/main.js",
@@ -79,7 +79,8 @@
         {
           "target": "dmg",
           "arch": [
-            "arm64"
+            "arm64",
+            "x64"
           ]
         }
       ],

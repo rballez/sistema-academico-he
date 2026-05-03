@@ -17,6 +17,20 @@ import traceback
 import shutil
 import pathlib
 import hashlib
+import io
+
+# ── ENCODING UTF-8 EXPLÍCITO ─────────────────────────────────────────────────
+# En Windows, Python usa el codepage del sistema (cp1252, cp850…) para
+# stdin/stdout por defecto. Eso corrompe los caracteres acentuados (á → ?)
+# al serializar JSON con ensure_ascii=False. Forzamos UTF-8 aquí, antes de
+# cualquier I/O, para que funcione igual en Windows, Linux y macOS.
+if hasattr(sys.stdin, 'buffer'):
+    sys.stdin  = io.TextIOWrapper(sys.stdin.buffer,  encoding='utf-8')
+if hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_buffering=True)
+if hasattr(sys.stderr, 'buffer'):
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', line_buffering=True)
+# ─────────────────────────────────────────────────────────────────────────────
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
