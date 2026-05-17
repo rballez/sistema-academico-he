@@ -5,7 +5,7 @@ node_modules/
 dist/
 build/
 out/
-python-dist/        # ejecutable PyInstaller (se regenera por plataforma)
+/python-dist/
 
 # ── Python ─────────────────────────────────────────────────────────────────────
 __pycache__/
