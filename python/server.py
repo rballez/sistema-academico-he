@@ -139,19 +139,140 @@ def handle(action: str, payload: dict) -> dict:
 
     elif action == 'exportar_resultados_examen':
         from generar_reportes import exportar_resultados_examen
-        path = exportar_resultados_examen(materia=payload['materia'], tipo_examen=payload['tipo_examen'], export_type=payload['export_type'])
+        path = exportar_resultados_examen(
+            materia=payload['materia'],
+            tipo_examen=payload['tipo_examen'],
+            export_type=payload.get('export_type', 'excel'),
+            ciclo_opt=payload.get('ciclo_opt', 'actual')
+        )
         return {'path': path}
 
     elif action == 'generar_hojas_rotacion':
         from generar_hojas_wrapper import generar_rotacion_desde_db
-        return generar_rotacion_desde_db(grado=payload.get('grado'), desde_csv=payload.get('csv_guardias'), out_dir=payload.get('output_dir'))
+        result = generar_rotacion_desde_db(grado=payload.get('grado'), desde_csv=payload.get('csv_guardias'), out_dir=payload.get('output_dir'))
+        if not result.get('ok', True):
+            raise ValueError(result.get('error', 'Error al generar hojas de rotación'))
+        return result
     elif action == 'generar_hojas_examen':
         from generar_hojas_wrapper import generar_examen_desde_db
-        return generar_examen_desde_db(grado=payload.get('grado'), desde_csv=payload.get('csv_guardias'), out_dir=payload.get('output_dir'))
+        result = generar_examen_desde_db(grado=payload.get('grado'), desde_csv=payload.get('csv_guardias'), out_dir=payload.get('output_dir'))
+        if not result.get('ok', True):
+            raise ValueError(result.get('error', 'Error al generar hojas de examen'))
+        return result
     elif action == 'exportar_excel':
         # La tabla Global normal
         from generar_reportes import exportar_excel_global
         return {'path': exportar_excel_global(grado=payload.get('grado'))}
+
+    # ── EDICIÓN MANUAL DE CALIFICACIONES ──
+    elif action == 'editar_calificacion':
+        # Actualiza un registro individual en examenes_raw o rotaciones_raw
+        tabla = 'examenes_raw' if payload.get('tabla') == 'examen' else 'rotaciones_raw'
+        campo_pts = 'percent_correct' if tabla == 'examenes_raw' else 'earned_points'
+        conn = db.get_connection()
+        try:
+            conn.execute(f"UPDATE {tabla} SET {campo_pts}=? WHERE id=?",
+                         (float(payload['valor']), payload['registro_id']))
+            conn.commit()
+        finally:
+            conn.close()
+        cc.recalcular_todo()
+        return {'ok': True}
+
+    elif action == 'eliminar_calificaciones_alumno':
+        # Elimina TODOS los registros de un alumno para una materia+tipo+ciclo dado
+        tabla = 'examenes_raw' if payload.get('tabla') == 'examen' else 'rotaciones_raw'
+        ciclo_d = payload.get('ciclo') or db.get_ciclo_actual()
+        conn = db.get_connection()
+        try:
+            if tabla == 'examenes_raw':
+                conn.execute(
+                    "DELETE FROM examenes_raw WHERE student_id=? AND materia=? AND tipo_examen=? AND ciclo=?",
+                    (payload['mip_id'], payload['materia'], payload['tipo_examen'], ciclo_d)
+                )
+            else:
+                conn.execute(
+                    "DELETE FROM rotaciones_raw WHERE student_id=? AND materia=? AND ciclo=?",
+                    (payload['mip_id'], payload['materia'], ciclo_d)
+                )
+            conn.commit()
+        finally:
+            conn.close()
+        cc.recalcular_todo()
+        return {'ok': True}
+
+    elif action == 'get_calificaciones_alumno':
+        # Retorna todos los registros crudos de un alumno para edición
+        ciclo_d = payload.get('ciclo') or db.get_ciclo_actual()
+        mip_id  = payload['mip_id']
+        conn = db.get_connection()
+        try:
+            examenes = db.rows_to_list(conn.execute(
+                "SELECT id, materia, tipo_examen, percent_correct as valor, ciclo FROM examenes_raw WHERE student_id=? AND ciclo=? ORDER BY materia, tipo_examen",
+                (mip_id, ciclo_d)).fetchall())
+            rotaciones = db.rows_to_list(conn.execute(
+                "SELECT id, materia, 'rotacion' as tipo_examen, earned_points as valor, ciclo FROM rotaciones_raw WHERE student_id=? AND ciclo=? AND estado='activo' ORDER BY materia",
+                (mip_id, ciclo_d)).fetchall())
+        finally:
+            conn.close()
+        return {'examenes': examenes, 'rotaciones': rotaciones}
+
+    elif action == 'crear_calificacion_manual':
+        # Inserta un registro nuevo de examen o rotación para un alumno
+        mip_id  = payload['mip_id']
+        materia = payload['materia']
+        tipo    = payload['tipo_examen']
+        valor   = float(payload['valor'])
+        ciclo_d = payload.get('ciclo') or db.get_ciclo_actual()
+        conn = db.get_connection()
+        try:
+            alumno = conn.execute("SELECT grado FROM alumnos WHERE mip_id=?", (mip_id,)).fetchone()
+            grado_ref = alumno['grado'] if alumno else 'MIP 1'
+            if tipo == 'rotacion':
+                conn.execute(
+                    "INSERT INTO rotaciones_raw (student_id, earned_points, paper_timestamp, key_version, materia, ciclo, estado) VALUES (?,?,datetime('now'),?,?,?,'activo')",
+                    (mip_id, valor, materia[0].upper(), materia, ciclo_d)
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO examenes_raw (student_id, earned_points, percent_correct, grado_ref, materia, tipo_examen, ciclo) VALUES (?,?,?,?,?,?,?)",
+                    (mip_id, valor, valor, grado_ref, materia, tipo, ciclo_d)
+                )
+            conn.commit()
+        finally:
+            conn.close()
+        cc.recalcular_todo()
+        return {'ok': True}
+
+    # ── IMPORTAR FORMATO ANTIGUO ──
+    elif action == 'importar_formato_antiguo_examenes':
+        from importar_formato_antiguo import importar_examenes_formato_antiguo
+        result = importar_examenes_formato_antiguo(
+            content_b64=payload['content_b64'],
+            ciclo_destino=payload.get('ciclo_destino') or db.get_ciclo_actual()
+        )
+        cc.recalcular_todo()
+        return result
+
+    elif action == 'importar_formato_antiguo_rotaciones':
+        from importar_formato_antiguo import importar_rotaciones_formato_antiguo
+        result = importar_rotaciones_formato_antiguo(
+            content_b64=payload['content_b64'],
+            ciclo_destino=payload.get('ciclo_destino') or db.get_ciclo_actual()
+        )
+        cc.recalcular_todo()
+        return result
+
+    elif action == 'get_ciclos_disponibles':
+        # Lista ciclos disponibles en examenes_raw y rotaciones_raw
+        conn = db.get_connection()
+        try:
+            rows1 = conn.execute("SELECT DISTINCT ciclo FROM examenes_raw ORDER BY ciclo DESC").fetchall()
+            rows2 = conn.execute("SELECT DISTINCT ciclo FROM rotaciones_raw ORDER BY ciclo DESC").fetchall()
+            ciclos = sorted(set([r['ciclo'] for r in rows1] + [r['ciclo'] for r in rows2]), reverse=True)
+        finally:
+            conn.close()
+        return {'ciclos': ciclos}
 
     else: raise ValueError(f"Acción desconocida: {action}")
 

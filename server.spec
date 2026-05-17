@@ -27,12 +27,18 @@ a = Analysis(
     datas=[
         # schema.sql se copia a db/ dentro del bundle → db.py lo busca ahí
         (str(DB_DIR / 'schema.sql'), 'db'),
+        # Plantillas PDF y fuente — necesarias para generar_hojas en producción
+        (str(ROOT / 'assets' / 'Hoja_rotacion_ans.pdf'), 'assets'),
+        (str(ROOT / 'assets' / 'Hoja_rotacion_rev.pdf'), 'assets'),
+        (str(ROOT / 'assets' / 'Hoja_respuestas.pdf'),   'assets'),
+        (str(ROOT / 'assets' / 'Avenir.ttc'),             'assets'),
     ],
     hiddenimports=[
         # módulos locales importados dinámicamente en server.py
         'db',
         'gestionar_alumnos',
         'importar_zipgrade',
+        'importar_formato_antiguo',
         'calcular_calificaciones',
         'registro_manual',
         'generar_reportes',
@@ -48,7 +54,14 @@ a = Analysis(
         'reportlab.lib.styles',
         'reportlab.lib.units',
         'reportlab.platypus',
+        'reportlab.graphics',
         'pypdf',
+        # Pillow — requerido por reportlab para insertar imágenes en PDFs
+        'PIL',
+        'PIL.Image',
+        'PIL.ImageDraw',
+        'PIL.ImageFont',
+        'PIL.PdfImagePlugin',
     ],
     hookspath=[],
     hooksconfig={},
@@ -60,7 +73,6 @@ a = Analysis(
         'numpy',
         'pandas',
         'scipy',
-        'PIL',
         'PyQt5',
         'wx',
     ],

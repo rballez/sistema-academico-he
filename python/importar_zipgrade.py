@@ -150,9 +150,14 @@ def importar_examenes_preview(contenido_csv: str) -> dict:
             percent_correct = float(percent_raw) if percent_raw else earned_points
             grado_norm = 'MIP 1' if '1' in grado_ref else ('MIP 2' if '2' in grado_ref else grado_ref)
 
-            # Buscar nombre real
-            al = conn.execute("SELECT nombre_completo, nombres, ap_paterno FROM alumnos WHERE mip_id=?", (student_id,)).fetchone()
+            # Buscar nombre real y grado real del alumno en BD
+            al = conn.execute("SELECT nombre_completo, nombres, ap_paterno, grado FROM alumnos WHERE mip_id=?", (student_id,)).fetchone()
             nombre = al['nombre_completo'] if al and al['nombre_completo'] else (f"{al['ap_paterno']} {al['nombres']}" if al else "Desconocido")
+
+            # Si el CSV no trajo un grado_ref válido, usar el grado real del alumno
+            # Esto evita que la query de Resultados no encuentre los datos
+            if grado_norm not in ('MIP 1', 'MIP 2') and al and al['grado']:
+                grado_norm = al['grado']
 
             registros.append({
                 'mip_id': student_id,

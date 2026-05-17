@@ -221,77 +221,126 @@ def exportar_lista_asistencia_pdf(tipo: str, grado_filtro: str = 'Todos', ciclo:
     return dest
 
 
-def exportar_resultados_examen(materia: str, tipo_examen: str, export_type: str = 'excel', ciclo: str = None) -> str:
-    """Exporta solo a Excel. Usa formato condicional y redondeo."""
-    if ciclo is None: ciclo = get_ciclo_actual()
+def _build_resultados_sheet(ws, materia: str, tipo_examen: str, ciclo: str, titulo_extra: str = ''):
+    """Rellena una hoja de Excel con resultados de examen para el ciclo dado."""
+    import openpyxl
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+
     conn = get_connection()
     try:
         query = """
-            SELECT a.nombre_completo as nombre, a.grado, 
+            SELECT a.nombre_completo as nombre, a.grado,
                    MAX(e.percent_correct) as calificacion
             FROM alumnos a
             JOIN examenes_raw e ON a.mip_id = e.student_id
-            WHERE a.activo=1 AND e.materia=? AND e.tipo_examen=? AND e.ciclo=?
+            WHERE e.materia=? AND e.tipo_examen=? AND e.ciclo=?
             GROUP BY a.mip_id
         """
         rows = rows_to_list(conn.execute(query, (materia, tipo_examen, ciclo)).fetchall())
-    finally: conn.close()
+    finally:
+        conn.close()
 
     mip2, mip1 = [], []
     for r in rows:
         r['cal_redondeada'] = redondear(r['calificacion'])
         if r['cal_redondeada'] is not None:
-            if r['grado'] == 'MIP 2': mip2.append(r)
-            else: mip1.append(r)
-            
+            (mip2 if r['grado'] == 'MIP 2' else mip1).append(r)
+
     mip2.sort(key=lambda x: x['cal_redondeada'], reverse=True)
     mip1.sort(key=lambda x: x['cal_redondeada'], reverse=True)
 
+    fill_red    = PatternFill(start_color="F5B7B1", end_color="F5B7B1", fill_type="solid")
+    fill_yellow = PatternFill(start_color="F9E79F", end_color="F9E79F", fill_type="solid")
+    fill_green  = PatternFill(start_color="A9DFBF", end_color="A9DFBF", fill_type="solid")
+    fill_header = PatternFill(start_color="F1948A", end_color="F1948A", fill_type="solid")
+    font_bold   = Font(bold=True)
+    border_thin = Border(left=Side(style='thin'), right=Side(style='thin'),
+                         top=Side(style='thin'), bottom=Side(style='thin'))
+    align_center = Alignment(horizontal='center', vertical='center')
+
+    ws.column_dimensions['A'].width = 50
+    ws.column_dimensions['B'].width = 15
+
+    # Título de ciclo
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=2)
+    ct = ws.cell(row=1, column=1, value=f"Ciclo: {ciclo}{' — ' + titulo_extra if titulo_extra else ''}")
+    ct.font = Font(bold=True, size=12)
+    ct.alignment = align_center
+
+    row_idx = 2
+    for grado_lbl, data in [("MIPS 2", mip2), ("MIPS 1", mip1)]:
+        if not data:
+            continue
+        ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=2)
+        c = ws.cell(row=row_idx, column=1, value=grado_lbl)
+        c.fill = fill_header; c.font = font_bold; c.alignment = align_center; c.border = border_thin
+        ws.cell(row=row_idx, column=2).border = border_thin
+        row_idx += 1
+
+        c1, c2 = ws.cell(row=row_idx, column=1, value="NOMBRE"), ws.cell(row=row_idx, column=2, value="CALIFICACIÓN")
+        for c in [c1, c2]:
+            c.fill = fill_header; c.font = font_bold; c.alignment = align_center; c.border = border_thin
+        row_idx += 1
+
+        for d in data:
+            c1 = ws.cell(row=row_idx, column=1, value=d['nombre'])
+            c2 = ws.cell(row=row_idx, column=2, value=d['cal_redondeada'])
+            c1.border = border_thin; c2.border = border_thin
+            c2.alignment = align_center; c2.font = font_bold
+            val = d['cal_redondeada']
+            c2.fill = fill_green if val >= 70 else (fill_yellow if val >= 60 else fill_red)
+            row_idx += 1
+        row_idx += 2
+
+
+def exportar_resultados_examen(materia: str, tipo_examen: str, export_type: str = 'excel',
+                               ciclo: str = None, ciclo_opt: str = 'actual') -> str:
+    """
+    Exporta resultados de examen a Excel.
+    ciclo_opt: 'actual' | 'anterior' | 'ambos'
+    """
     try:
         import openpyxl
-        from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
-        
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = f"Resultados {materia}"
-        
-        fill_red = PatternFill(start_color="F5B7B1", end_color="F5B7B1", fill_type="solid")
-        fill_yellow = PatternFill(start_color="F9E79F", end_color="F9E79F", fill_type="solid")
-        fill_green = PatternFill(start_color="A9DFBF", end_color="A9DFBF", fill_type="solid")
-        fill_header = PatternFill(start_color="F1948A", end_color="F1948A", fill_type="solid")
-        font_bold = Font(bold=True); border_thin = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-        align_center = Alignment(horizontal='center', vertical='center')
-
-        ws.column_dimensions['A'].width = 50
-        ws.column_dimensions['B'].width = 15
-
-        row_idx = 1
-        for grado_lbl, data in [("MIPS 2", mip2), ("MIPS 1", mip1)]:
-            if not data: continue
-            ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=2)
-            c = ws.cell(row=row_idx, column=1, value=grado_lbl)
-            c.fill = fill_header; c.font = font_bold; c.alignment = align_center; c.border = border_thin
-            ws.cell(row=row_idx, column=2).border = border_thin; row_idx += 1
-            
-            c1, c2 = ws.cell(row=row_idx, column=1, value="NOMBRE"), ws.cell(row=row_idx, column=2, value="CALIFICACIÓN")
-            for c in [c1, c2]: c.fill = fill_header; c.font = font_bold; c.alignment = align_center; c.border = border_thin
-            row_idx += 1
-            
-            for d in data:
-                c1, c2 = ws.cell(row=row_idx, column=1, value=d['nombre']), ws.cell(row=row_idx, column=2, value=d['cal_redondeada'])
-                c1.border = border_thin; c2.border = border_thin; c2.alignment = align_center; c2.font = font_bold
-                val = d['cal_redondeada']
-                if val >= 70: c2.fill = fill_green
-                elif val >= 60: c2.fill = fill_yellow
-                else: c2.fill = fill_red
-                row_idx += 1
-            row_idx += 2 
-            
-        dest = pathlib.Path.home() / 'Desktop' / f'Resultados_{materia}_{tipo_examen}.xlsx'
-        wb.save(dest)
-        return str(dest)
     except ImportError:
         raise RuntimeError("La librería openpyxl no está instalada. Ejecuta: pip install openpyxl")
+
+    ciclo_actual = ciclo or get_ciclo_actual()
+
+    # Detectar ciclo anterior (el más reciente distinto al actual en examenes_raw)
+    conn = get_connection()
+    try:
+        row_ant = conn.execute(
+            "SELECT DISTINCT ciclo FROM examenes_raw WHERE ciclo != ? ORDER BY ciclo DESC LIMIT 1",
+            (ciclo_actual,)
+        ).fetchone()
+        ciclo_anterior = row_ant['ciclo'] if row_ant else None
+    finally:
+        conn.close()
+
+    wb = openpyxl.Workbook()
+
+    if ciclo_opt == 'ambos' and ciclo_anterior:
+        # Hoja 1: ciclo actual
+        ws1 = wb.active
+        ws1.title = f"Actual ({ciclo_actual})"
+        _build_resultados_sheet(ws1, materia, tipo_examen, ciclo_actual, "Actual")
+        # Hoja 2: ciclo anterior
+        ws2 = wb.create_sheet(title=f"Anterior ({ciclo_anterior})")
+        _build_resultados_sheet(ws2, materia, tipo_examen, ciclo_anterior, "Anterior")
+    elif ciclo_opt == 'anterior' and ciclo_anterior:
+        ws = wb.active
+        ws.title = f"Anterior ({ciclo_anterior})"
+        _build_resultados_sheet(ws, materia, tipo_examen, ciclo_anterior, "Anterior")
+    else:
+        # Por defecto: ciclo actual
+        ws = wb.active
+        ws.title = f"Actual ({ciclo_actual})"
+        _build_resultados_sheet(ws, materia, tipo_examen, ciclo_actual, "Actual")
+
+    ciclo_tag = ciclo_opt if ciclo_opt != 'actual' else ciclo_actual
+    dest = pathlib.Path.home() / 'Desktop' / f'Resultados_{materia}_{tipo_examen}_{ciclo_tag}.xlsx'
+    wb.save(dest)
+    return str(dest)
 
 
 def exportar_excel_global(grado: str = None) -> str:

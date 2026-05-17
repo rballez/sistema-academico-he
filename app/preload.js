@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('api', {
   openFolder:    (path)               => ipcRenderer.invoke('shell:openFolder', path),
   openFile:      (path)               => ipcRenderer.invoke('shell:openFile', path),
   openDirectory: (title)              => ipcRenderer.invoke('dialog:openDirectory', title),
+  openXLSX:      (title)              => ipcRenderer.invoke('dialog:openXLSX', title),
 
   // ── Tema ───────────────────────────────────────────────────────────────────
   getSystemTheme: ()               => ipcRenderer.invoke('theme:get'),

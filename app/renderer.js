@@ -25,9 +25,26 @@ async function initDB() { await py('init_db'); }
 
 // ── SEGURIDAD (CONTRASEÑA) ──
 async function checkAuth() {
+  // Ocultar ambos paneles antes del check (evita estado residual al reabrir en macOS)
+  document.getElementById('auth-login').style.display = 'none';
+  document.getElementById('auth-setup').style.display = 'none';
+  document.getElementById('auth-error').textContent = '';
+
   const r = await py('auth_check');
-  if (r.data?.has_password) { document.getElementById('auth-login').style.display = 'block'; } 
-  else { document.getElementById('auth-setup').style.display = 'block'; }
+  if (!r.ok || r.data === undefined) {
+    // Error de comunicación con Python (ej. proceso recién iniciado). 
+    // Reintentar después de un momento en lugar de mostrar setup por error.
+    setTimeout(checkAuth, 600);
+    return;
+  }
+  if (r.data?.has_password) {
+    document.getElementById('auth-pwd').value = '';
+    document.getElementById('auth-login').style.display = 'block';
+  } else {
+    document.getElementById('auth-new-pwd').value = '';
+    document.getElementById('auth-new-pwd-conf').value = '';
+    document.getElementById('auth-setup').style.display = 'block';
+  }
 }
 async function setupPassword() {
   const p1 = document.getElementById('auth-new-pwd').value, p2 = document.getElementById('auth-new-pwd-conf').value;
@@ -183,7 +200,8 @@ async function descargarEjemploGuardias() { const r = await py('generar_csv_ejem
 async function generarHojasRotacion() {
   const g = document.getElementById('rot-gen-grado').value, d = document.getElementById('rot-out-dir').value, p = {output_dir:d||null};
   if(g==='guardia'){if(!rotGuardiaCsv)return toast('Carga el CSV de guardia','warning');p.csv_guardias=rotGuardiaCsv;} else if(g) p.grado=g;
-  showProgress(20); const r=await py('generar_hojas_rotacion',p); showProgress(100); if(r.ok)toast('Hojas generadas','success', 6000); else toast('Error: '+r.error,'error');
+  showProgress(20); const r=await py('generar_hojas_rotacion',p); showProgress(100);
+  if(r.ok){ const n=r.data?.generados??0; toast(n>0?`✓ ${n} hojas generadas`:'Sin hojas generadas — revisa los errores en la consola', n>0?'success':'warning', 6000); if(n>0&&r.data?.directorio) window.api.openFolder(r.data.directorio); } else toast('Error: '+r.error,'error');
 }
 async function importarCSVRotaciones() {
   const f = await window.api.openCSV('Seleccionar EVAL.csv (Rotaciones)'); if(!f) return;
@@ -210,7 +228,8 @@ function filtrarTablaRot(gr, ctx) {
 async function generarHojasExamen() {
   const g = document.getElementById('exam-gen-grado').value, d = document.getElementById('exam-out-dir').value, p = {output_dir:d||null};
   if(g==='guardia'){if(!examGuardiaCsv)return toast('Carga CSV guardia','warning');p.csv_guardias=examGuardiaCsv;} else if(g) p.grado=g;
-  showProgress(20); const r=await py('generar_hojas_examen',p); showProgress(100); if(r.ok)toast('Generadas','success'); else toast('Error','error');
+  showProgress(20); const r=await py('generar_hojas_examen',p); showProgress(100);
+  if(r.ok){ const n=r.data?.generados??0; toast(n>0?`✓ ${n} hojas generadas`:'Sin hojas generadas — revisa los errores en la consola', n>0?'success':'warning', 5000); if(n>0&&r.data?.directorio) window.api.openFolder(r.data.directorio); } else toast('Error: '+r.error,'error');
 }
 
 async function importarCSVExamenPreview() {
@@ -237,7 +256,16 @@ function cancelarPreview() { examPreviewLote = []; document.getElementById('card
 async function confirmarYGuardarLote() {
   const mat = document.getElementById('exam-import-materia').value, tip = document.getElementById('exam-import-tipo').value, fname = document.getElementById('card-preview-exam').dataset.filename, hash = document.getElementById('card-preview-exam').dataset.hash;
   showProgress(30); const r = await py('guardar_examenes_lote', { registros: examPreviewLote, materia: mat, tipo_examen: tip, nombre_archivo: fname, hash_csv: hash }); showProgress(100);
-  if(r.ok) { toast(`✓ ${r.data.insertados} exámenes guardados`, 'success'); cancelarPreview(); cargarTablaGlobal(); } else toast('Error: ' + r.error, 'error');
+  if(r.ok) {
+    toast(`✓ ${r.data.insertados} exámenes guardados`, 'success');
+    cancelarPreview();
+    cargarTablaGlobal();
+    // Sincronizar filtros de Resultados con lo que se acaba de guardar
+    document.getElementById('exam-res-materia').value = mat;
+    document.getElementById('exam-res-tipo').value = tip;
+    // Ir automáticamente a la pestaña Resultados y cargar datos
+    document.getElementById('btn-exam-resultados')?.click();
+  } else toast('Error: ' + r.error, 'error');
 }
 
 // ── MANUAL Y CAMPANA ──
@@ -304,10 +332,21 @@ function onMateriaCambio() {
   }
 }
 
-async function exportarResultadosExamen() {
-  const mat = document.getElementById('exam-res-materia').value, tip = document.getElementById('exam-res-tipo').value;
-  showProgress(30); const r = await py('exportar_resultados_examen', { materia: mat, tipo_examen: tip, export_type: 'excel' }); showProgress(100);
-  if (r.ok || r.data?.path) { toast(`✓ Excel generado correctamente`, 'success'); window.api.openFile(r.data?.path || r.path); } else toast('Error al exportar', 'error');
+async function exportarResultadosExamen() { abrirModalExportResultados(); }
+function abrirModalExportResultados() {
+  document.getElementById('export-res-ciclo-opt').value = 'actual';
+  openModal('modal-export-resultados');
+}
+async function confirmarExportResultados() {
+  const mat = document.getElementById('exam-res-materia').value;
+  const tip = document.getElementById('exam-res-tipo').value;
+  const cicloOpt = document.getElementById('export-res-ciclo-opt').value;
+  closeModal('modal-export-resultados');
+  showProgress(30);
+  const r = await py('exportar_resultados_examen', { materia: mat, tipo_examen: tip, export_type: 'excel', ciclo_opt: cicloOpt });
+  showProgress(100);
+  if (r.ok || r.data?.path) { toast(`✓ Excel generado (${cicloOpt})`, 'success'); window.api.openFile(r.data?.path || r.path); }
+  else toast('Error al exportar: ' + (r.error || ''), 'error');
 }
 
 // ── CALIFICACIONES GLOBALES Y MEGA TABLA (UNIFICADA) ──
@@ -342,9 +381,9 @@ function renderTablasCalificaciones() {
    });
 
    const MAT = [ {lbl:'GyO',rot:'gyo_rot',pa:'gyo_parcial',fi:'gyo_final',tot:'gyo_total'}, {lbl:'MI',rot:'mi_rot',pa:'mi_parcial',fi:'mi_final',tot:'mi_total'}, {lbl:'Cirugía',rot:'ciru_rot',pa:'ciru_parcial',fi:'ciru_final',tot:'ciru_total'}, {lbl:'Pediatría',rot:'pedia_rot',pa:'pedia_parcial',fi:'pedia_final',tot:'pedia_total'}, {lbl:'Familiar',rot:'fam_rot',pa:'fam_parcial',fi:'fam_final',tot:'fam_total'}, {lbl:'Urgencias',rot:'urg_rot',pa:'urg_parcial',fi:'urg_final',tot:'urg_total'} ];
-   document.getElementById('thead-cal-global').innerHTML=`<tr><th rowspan="2">Nombre</th><th rowspan="2">ID</th><th rowspan="2">Grado</th>${MAT.map(m=>`<th colspan="4" style="text-align:center;background:${cMap[m.lbl]}; color:var(--c-text-th)">${m.lbl}</th>`).join('')}<th rowspan="2" style="background:var(--azul-light); text-align:center;">Entregas<br>(15%)</th><th rowspan="2" style="background:var(--dorado);color:#222; text-align:center;">Final</th></tr><tr>${MAT.map(()=>'<th>Rot</th><th>Parcial</th><th>Final</th><th>Total</th>').join('')}</tr>`;
+   document.getElementById('thead-cal-global').innerHTML=`<tr><th rowspan="2">Nombre</th><th rowspan="2">ID</th><th rowspan="2">Grado</th>${MAT.map(m=>`<th colspan="4" style="text-align:center;background:${cMap[m.lbl]}; color:var(--c-text-th)">${m.lbl}</th>`).join('')}<th rowspan="2" style="background:var(--azul-light); text-align:center;">Entregas<br>(15%)</th><th rowspan="2" style="background:var(--dorado);color:#222; text-align:center;">Final</th><th rowspan="2" style="min-width:52px;"></th></tr><tr>${MAT.map(()=>'<th>Rot</th><th>Parcial</th><th>Final</th><th>Total</th>').join('')}</tr>`;
    const OPTS = `<option value="">—</option><option value="excelente">😊 Ex (100)</option><option value="bien">🙂 Bn (85)</option><option value="decente">😐 Dec (70)</option><option value="deficiente">😕 Def (50)</option><option value="no_participa">❌ NP (0)</option>`;
-   document.getElementById('tbody-cal-global').innerHTML = fGlobal.map(row=> `<tr><td style="text-align:left;">${row.nombre_completo||''}</td><td><code>${row.mip_id}</code></td><td><span class="badge-${row.grado==='MIP 1'?'mip1':'mip2'}">${row.grado}</span></td>${MAT.map(m=>`<td>${gradePill(row[m.rot])}</td><td>${gradePill(row[m.pa])}</td><td>${gradePill(row[m.fi])}</td><td style="font-weight:bold">${gradePill(row[m.tot])}</td>`).join('')}<td><select class="select-rubrica" onchange="setRubricaGlobal('${row.mip_id}',this.value)">${OPTS.replace(`value="${row.rubrica_entregas_global||''}"`, `value="${row.rubrica_entregas_global||''}" selected`)}</select></td><td style="font-weight:bold; font-size:14px;">${gradePill(row.cal_final_global)}</td></tr>`).join('')||'<tr><td colspan="30" class="text-muted text-center">Vacio</td></tr>';
+   document.getElementById('tbody-cal-global').innerHTML = fGlobal.map(row=>`<tr><td style="text-align:left;">${row.nombre_completo||''}</td><td><code>${row.mip_id}</code></td><td><span class="badge-${row.grado==='MIP 1'?'mip1':'mip2'}">${row.grado}</span></td>${MAT.map(m=>`<td>${gradePill(row[m.rot])}</td><td>${gradePill(row[m.pa])}</td><td>${gradePill(row[m.fi])}</td><td style="font-weight:bold">${gradePill(row[m.tot])}</td>`).join('')}<td><select class="select-rubrica" onchange="setRubricaGlobal('${row.mip_id}',this.value)">${OPTS.replace(`value="${row.rubrica_entregas_global||''}"`, `value="${row.rubrica_entregas_global||''}" selected`)}</select></td><td style="font-weight:bold; font-size:14px;">${gradePill(row.cal_final_global)}</td><td><button class="btn btn-ghost btn-icon btn-sm" title="Editar calificaciones" onclick="abrirModalEditarCal('${row.mip_id}')">✏️</button></td></tr>`).join('')||'<tr><td colspan="31" class="text-muted text-center">Vacio</td></tr>';
 
    const mList = ['GyO', 'Pediatría', 'Cirugía', 'Medicina Interna', 'Urgencias', 'Familiar'];
    const tStr = document.getElementById('check-troncal').checked ? '+Tr' : '';
@@ -374,6 +413,145 @@ async function setRubricaGlobal(id, rub) { if(!rub)return; await py('set_rubrica
 async function recalcularTodo() { showProgress(20); const r=await py('recalcular_todo'); showProgress(100); if(r.ok){toast('✓ Recalculado','success');cargarTablaGlobal();} else toast('Error','error'); }
 async function exportarExcel(t) { showProgress(30); const r=await py('exportar_excel',{tipo:t,grado:calGrado||null, usar_troncal: document.getElementById('check-troncal').checked}); showProgress(100); if(r.ok){toast('✓ Guardado','success');window.api.openFile(r.data.path);}else toast('Error','error'); }
 
+// ── EDICIÓN DE CALIFICACIONES INDIVIDUALES ──
+let _editarCalRegistros = [];   // todos los registros crudos del alumno
+let editarCalMipId = '';
+
+async function abrirModalEditarCal(mip_id) {
+  editarCalMipId = mip_id;
+  const alumno = allAlumnos.find(a => a.mip_id === mip_id);
+  document.getElementById('editar-cal-nombre').textContent = alumno?.nombre_completo || mip_id;
+  document.getElementById('editar-cal-pwd').value = '';
+  document.getElementById('editar-cal-valor').value = '';
+  document.getElementById('editar-cal-actual').textContent = '…';
+  document.getElementById('editar-cal-registro-info').textContent = '';
+
+  showProgress(30);
+  const r = await py('get_calificaciones_alumno', { mip_id });
+  showProgress(100);
+  if (!r.ok) return toast('Error al cargar calificaciones', 'error');
+
+  _editarCalRegistros = [
+    ...(r.data?.examenes   || []).map(e => ({...e, tabla:'examen'})),
+    ...(r.data?.rotaciones || []).map(e => ({...e, tabla:'rotacion'})),
+  ];
+
+  // Seleccionar primera materia/tipo por defecto y mostrar valor actual
+  document.getElementById('editar-cal-materia').value = 'GyO';
+  document.getElementById('editar-cal-tipo').value = 'parcial';
+  onEditarCalChange();
+  openModal('modal-editar-cal');
+}
+
+function onEditarCalChange() {
+  const materia = document.getElementById('editar-cal-materia').value;
+  const tipo    = document.getElementById('editar-cal-tipo').value;
+
+  // Buscar registro que coincida con materia y tipo
+  let reg = null;
+  if (tipo === 'rotacion') {
+    reg = _editarCalRegistros.find(r => r.tabla === 'rotacion' && r.materia === materia);
+  } else {
+    reg = _editarCalRegistros.find(r => r.tabla === 'examen' && r.materia === materia && r.tipo_examen === tipo);
+  }
+
+  const elActual = document.getElementById('editar-cal-actual');
+  const elInfo   = document.getElementById('editar-cal-registro-info');
+
+  if (reg && reg.valor !== null && reg.valor !== undefined) {
+    const val = parseFloat(reg.valor);
+    elActual.textContent = Math.round(val * 10) / 10;
+    elActual.style.color = val >= 70 ? 'var(--verde)' : val >= 60 ? 'var(--dorado)' : 'var(--danger)';
+    elInfo.textContent = `ID registro: ${reg.id} · Ciclo: ${reg.ciclo}`;
+    document.getElementById('editar-cal-valor').value = Math.round(val * 10) / 10;
+  } else {
+    elActual.textContent = 'Sin registro';
+    elActual.style.color = 'var(--text-muted)';
+    elInfo.textContent = 'No hay datos para esta materia/tipo en el ciclo actual.';
+    document.getElementById('editar-cal-valor').value = '';
+  }
+}
+
+async function guardarEdicionCal() {
+  const pwd = document.getElementById('editar-cal-pwd').value;
+  if (!pwd) return toast('Ingresa la contraseña para confirmar', 'warning');
+
+  const auth = await py('auth_login', { pwd });
+  if (!auth.data?.valid) return toast('Contraseña incorrecta', 'error');
+
+  const materia   = document.getElementById('editar-cal-materia').value;
+  const tipo      = document.getElementById('editar-cal-tipo').value;
+  const nuevoVal  = document.getElementById('editar-cal-valor').value.trim();
+
+  // Buscar registro existente
+  let reg = null;
+  if (tipo === 'rotacion') {
+    reg = _editarCalRegistros.find(r => r.tabla === 'rotacion' && r.materia === materia);
+  } else {
+    reg = _editarCalRegistros.find(r => r.tabla === 'examen' && r.materia === materia && r.tipo_examen === tipo);
+  }
+
+  const valorNum = nuevoVal === '' ? null : parseFloat(nuevoVal);
+
+  // Sin registro existente y valor vacío/0 → nada que hacer
+  if (!reg && (valorNum === null || valorNum === 0)) {
+    return toast('No hay registro que modificar para esta combinación', 'info');
+  }
+
+  // Con registro existente, valor 0 o vacío → preguntar si eliminar
+  if (reg && (valorNum === null || valorNum === 0)) {
+    confirmDialog('Eliminar Registro',
+      `¿Eliminar la calificación de ${materia} (${tipo})? Se recalculará el promedio.`,
+      async () => {
+        showProgress(30);
+        const r = await py('editar_calificacion', {
+          registro_id: reg.id,
+          tabla: reg.tabla === 'rotacion' ? 'rotacion' : 'examen',
+          valor: 0
+        });
+        showProgress(100);
+        if (r.ok) {
+          toast('Registro eliminado (calificación = 0)', 'success');
+          closeModal('modal-editar-cal');
+          cargarTablaGlobal();
+        } else toast('Error: ' + (r.error || ''), 'error');
+      }, '🗑️');
+    return;
+  }
+
+  if (valorNum < 0 || valorNum > 100) return toast('El valor debe estar entre 0 y 100', 'warning');
+
+  confirmDialog('Guardar Cambio',
+    `¿Cambiar ${materia} (${tipo}) a ${valorNum}?`,
+    async () => {
+      showProgress(20);
+      let r;
+      if (reg) {
+        // Actualizar registro existente
+        r = await py('editar_calificacion', {
+          registro_id: reg.id,
+          tabla: reg.tabla === 'rotacion' ? 'rotacion' : 'examen',
+          valor: valorNum
+        });
+      } else {
+        // Crear nuevo registro
+        r = await py('crear_calificacion_manual', {
+          mip_id: editarCalMipId,
+          materia,
+          tipo_examen: tipo,
+          valor: valorNum
+        });
+      }
+      showProgress(100);
+      if (r.ok) {
+        toast(`✓ Calificación actualizada`, 'success');
+        closeModal('modal-editar-cal');
+        cargarTablaGlobal();
+      } else toast('Error: ' + (r.error || ''), 'error');
+    }, '✏️');
+}
+
+
 async function cargarGraficosExamen() {
   const mat = document.getElementById('cal-exam-materia').value, tip = document.getElementById('cal-exam-tipo').value;
   const r = await py('get_tabla_examenes', { materia:mat, tipo_examen:tip }); const tb = r.data?.tabla || [];
@@ -398,3 +576,49 @@ async function exportarBaseDatos() { showProgress(30); const r = await py('expor
 async function importarBaseDatos() { confirmDialog('Importar Respaldo', 'Asegúrate de poner el archivo "Respaldo_HE_Academico.db" en tu Escritorio. Esto sobrescribirá el sistema actual.', async () => { showProgress(30); const r = await py('importar_bd'); showProgress(100); if(r.ok) { toast('✓ Respaldo importado. El sistema se reiniciará.', 'success', 5000); setTimeout(() => window.location.reload(), 2000); } else toast('Error: ' + r.error, 'error'); }, '📥'); }
 async function wipeDatabase() { confirmDialog('BORRADO NUCLEAR', '¿ESTÁS 100% SEGURO? Se borrarán todos los alumnos, calificaciones, hojas y rotaciones. Úsalo solo para heredar el sistema al siguiente pasante.', () => { confirmDialog('VERIFICACIÓN FINAL', 'ÚLTIMA ADVERTENCIA. Esta acción es IRREVERSIBLE.', async () => { showProgress(30); const r = await py('borrar_todo_sistema'); showProgress(100); if(r.ok) { toast('Sistema restablecido de fábrica', 'success', 5000); setTimeout(() => window.location.reload(), 2000); } else toast('Error: ' + r.error, 'error'); }, '☢️'); }, '🗑️'); }
 async function cargarHistorial() { const r = await py('get_historial_importaciones'); document.getElementById('tbody-historial').innerHTML = (r.data?.historial || []).map(h=>`<tr><td><span class="badge-mip1">${h.tipo}</span></td><td class="text-sm">${h.archivo_nombre}</td><td class="text-sm">✅${h.registros_ok||0} / ⏭${h.registros_skip||0}</td><td class="text-sm">${h.fecha?.substring(0,16)||''}</td></tr>`).join('')||'<tr><td colspan="4" class="text-muted">Sin importaciones</td></tr>'; }
+
+// ── IMPORTAR FORMATO ANTIGUO ──
+let importarAntiguoTipo = 'examenes';
+
+function abrirImportarAntiguo(tipo) {
+  importarAntiguoTipo = tipo;
+  document.getElementById('importar-antiguo-tipo-lbl').textContent = tipo === 'examenes' ? 'Exámenes' : 'Rotaciones';
+  document.getElementById('importar-antiguo-pwd').value = '';
+  document.getElementById('importar-antiguo-ciclo').value = document.getElementById('ciclo-input')?.value || '';
+  const res = document.getElementById('importar-antiguo-result');
+  res.style.display = 'none'; res.innerHTML = '';
+  openModal('modal-importar-antiguo');
+}
+
+async function ejecutarImportarAntiguo() {
+  const pwd = document.getElementById('importar-antiguo-pwd').value;
+  if (!pwd) return toast('Ingresa la contraseña para continuar', 'warning');
+  const auth = await py('auth_login', { pwd });
+  if (!auth.data?.valid) return toast('Contraseña incorrecta', 'error');
+
+  const cicloDestino = document.getElementById('importar-antiguo-ciclo').value.trim();
+  if (!cicloDestino) return toast('Ingresa el ciclo destino (ej. 2025-2)', 'warning');
+
+  const f = await window.api.openXLSX(`Seleccionar archivo Excel de ${importarAntiguoTipo}`);
+  if (!f) return;
+
+  const action = importarAntiguoTipo === 'examenes'
+    ? 'importar_formato_antiguo_examenes'
+    : 'importar_formato_antiguo_rotaciones';
+
+  showProgress(20);
+  const r = await py(action, { content_b64: f.content_b64, ciclo_destino: cicloDestino });
+  showProgress(100);
+
+  const resDiv = document.getElementById('importar-antiguo-result');
+  resDiv.style.display = 'block';
+  if (r.ok) {
+    const noEnc = r.data?.no_encontrados?.length ? `<br><span class="text-warning">⚠️ ${r.data.no_encontrados.length} IDs no encontrados en el sistema.</span>` : '';
+    resDiv.innerHTML = `<div class="card mt-2" style="padding:12px;"><p style="color:var(--verde);"><strong>✅ Importación completada</strong></p><p class="text-sm">Registros insertados: <strong>${r.data?.insertados || 0}</strong> | Omitidos: ${r.data?.omitidos || 0}${noEnc}</p><p class="text-sm text-muted">Ciclo: ${r.data?.ciclo}</p></div>`;
+    toast(`✓ ${r.data?.insertados || 0} registros importados`, 'success');
+    cargarTablaGlobal();
+  } else {
+    resDiv.innerHTML = `<div class="card" style="padding:12px; border-color:var(--danger);"><p style="color:var(--danger);"><strong>❌ Error</strong></p><p class="text-sm">${r.error || 'Error desconocido'}</p></div>`;
+    toast('Error en importación: ' + (r.error || ''), 'error');
+  }
+}

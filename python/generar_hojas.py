@@ -25,6 +25,7 @@ Fecha: 2026
 import csv
 import os
 import re
+import sys
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 from reportlab.lib.colors import black
@@ -178,16 +179,16 @@ def detect_delimiter(path: str) -> str:
 def register_font():
     """Registra la fuente Avenir si está disponible"""
     if not os.path.exists(FONT_TTC):
-        print(f"⚠️  Fuente {FONT_TTC} no encontrada, usando Helvetica")
+        print(f"⚠️  Fuente {FONT_TTC} no encontrada, usando Helvetica", file=sys.stderr)
         return False
     try:
         pdfmetrics.registerFont(
             TTFont(FONT_NAME, FONT_TTC, subfontIndex=TTC_SUBFONT_INDEX)
         )
-        print(f"✓ Fuente {FONT_NAME} registrada")
+        print(f"✓ Fuente {FONT_NAME} registrada", file=sys.stderr)
         return True
     except Exception as e:
-        print(f"⚠️  Error registrando fuente: {e}")
+        print(f"⚠️  Error registrando fuente: {e}", file=sys.stderr)
         return False
 
 
@@ -300,14 +301,11 @@ def make_rotacion_reverso_overlay(overlay_path: str, sid9: str):
 def make_examen_overlay(overlay_path: str, page_w: float, page_h: float,
                         nombre: str, grado: str, sid9: str):
     """Genera el overlay para la hoja de examen"""
-    print(f"    [DEBUG] make_examen_overlay: nombre={nombre}, grado={grado}, sid9={sid9}")
-    
     c = canvas.Canvas(overlay_path, pagesize=(page_w, page_h))
     c.setFillColor(black)
     c.setStrokeColor(black)
-    
+
     # NOMBRE
-    print(f"    [DEBUG] Dibujando nombre...")
     draw_centered_in_box(
         c,
         EXAM_NAME_X_LEFT + EXAM_DX,
@@ -316,10 +314,9 @@ def make_examen_overlay(overlay_path: str, page_w: float, page_h: float,
         nombre,
         EXAM_NAME_SIZE
     )
-    
+
     # GRADO
     if grado:
-        print(f"    [DEBUG] Dibujando grado...")
         draw_centered_at(
             c,
             EXAM_GRADE_X_CENTER + EXAM_DX,
@@ -327,29 +324,25 @@ def make_examen_overlay(overlay_path: str, page_w: float, page_h: float,
             grado,
             EXAM_GRADE_SIZE
         )
-    
+
     # ID - Texto
-    print(f"    [DEBUG] Dibujando ID texto...")
     set_font(c, EXAM_ID_SIZE)
     baseline_fix = EXAM_ID_SIZE * 0.35
     y_text = (EXAM_MIP_DIGIT_Y + EXAM_DY) - baseline_fix
-    
+
     for i, ch in enumerate(sid9):
         x = EXAM_MIP_COL_X[i] + EXAM_DX
         c.drawCentredString(x, y_text, ch)
-    
+
     # ID - Burbujas
-    print(f"    [DEBUG] Dibujando ID burbujas...")
     for i, ch in enumerate(sid9):
         d = int(ch)
         x = EXAM_MIP_COL_X[i] + EXAM_DX
         y = EXAM_MIP_ROW_Y[d] + EXAM_DY
         c.circle(x, y, EXAM_BUBBLE_RADIUS, stroke=0, fill=1)
-    
-    print(f"    [DEBUG] Guardando overlay...")
+
     c.showPage()
     c.save()
-    print(f"    [DEBUG] ✓ Overlay guardado")
 
 
 # =============================================================================
@@ -472,53 +465,34 @@ def generar_hoja_rotacion(nombre: str, sid9: str, universidad: str, grado: str, 
 
 def generar_hoja_examen(nombre: str, sid9: str, grado: str, idx: int) -> str:
     """Genera una hoja de examen"""
-    
-    print(f"  [DEBUG] Generando examen para: {nombre}")
-    
+
     # Leer dimensiones del template
     base = PdfReader(TEMPLATE_EXAMEN)
     page = base.pages[0]
     page_w = float(page.mediabox.width)
     page_h = float(page.mediabox.height)
-    
-    print(f"  [DEBUG] Template: {page_w}x{page_h}")
-    
+
     # Paths
     overlay_path = os.path.join(OUT_DIR_EXAMEN, f"__overlay_{idx}.pdf")
     out_name = f"{sanitize_filename(nombre)}_{sid9}_{sanitize_filename(grado)}.pdf"
     out_path = os.path.join(OUT_DIR_EXAMEN, out_name)
-    
-    print(f"  [DEBUG] Overlay path: {overlay_path}")
-    print(f"  [DEBUG] Output path: {out_path}")
-    
+
     # Generar overlay
-    print(f"  [DEBUG] Generando overlay...")
     make_examen_overlay(overlay_path, page_w, page_h, nombre, grado, sid9)
-    
-    # Verificar que el overlay se creó
-    if os.path.exists(overlay_path):
-        print(f"  [DEBUG] ✓ Overlay creado: {os.path.getsize(overlay_path)} bytes")
-    else:
-        print(f"  [DEBUG] ✗ ERROR: Overlay NO se creó")
+
+    if not os.path.exists(overlay_path):
+        print(f"  ✗ ERROR: Overlay NO se creó para {nombre}", file=sys.stderr)
         return out_path
-    
+
     # Merge
-    print(f"  [DEBUG] Haciendo merge...")
     merge_overlay(TEMPLATE_EXAMEN, overlay_path, out_path)
-    
-    # Verificar que el output se creó
-    if os.path.exists(out_path):
-        print(f"  [DEBUG] ✓ Output creado: {os.path.getsize(out_path)} bytes")
-    else:
-        print(f"  [DEBUG] ✗ ERROR: Output NO se creó")
-    
+
     # Limpiar temporal
     try:
         os.remove(overlay_path)
-        print(f"  [DEBUG] ✓ Overlay temporal eliminado")
     except OSError as e:
-        print(f"  [DEBUG] ⚠ No se pudo eliminar overlay: {e}")
-    
+        print(f"  ⚠ No se pudo eliminar overlay: {e}", file=sys.stderr)
+
     return out_path
 
 

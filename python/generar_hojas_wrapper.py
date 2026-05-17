@@ -18,6 +18,22 @@ from db import get_connection, get_ciclo_actual, rows_to_list
 import gestionar_alumnos as ga
 
 
+def _get_assets_dir() -> str:
+    """
+    Devuelve la ruta a la carpeta assets/ tanto en desarrollo como en producción.
+
+    - Desarrollo:   assets/ está dos niveles arriba del script (raíz del proyecto).
+    - Producción:   PyInstaller copia los datas junto al ejecutable, por lo que
+                    assets/ está en el mismo directorio que sys.executable.
+    """
+    if getattr(sys, 'frozen', False):
+        # Bundle PyInstaller (one-folder): ejecutable en .../python-dist/server/
+        # los datas quedan en .../python-dist/server/assets/
+        return os.path.join(os.path.dirname(sys.executable), 'assets')
+    # Modo desarrollo: HE-APP/python/generar_hojas_wrapper.py → HE-APP/assets/
+    return str(pathlib.Path(__file__).parent.parent / 'assets')
+
+
 def _get_output_dir(user_dir=None):
     if user_dir and os.path.isdir(user_dir):
         return user_dir
@@ -97,10 +113,10 @@ def generar_rotacion_desde_db(grado: str = None, desde_csv: str = None, out_dir:
     if not alumnos:
         return {'ok': False, 'error': 'No hay alumnos para generar hojas', 'generados': 0}
 
-    project_dir = pathlib.Path(__file__).parent.parent
+    assets_dir = _get_assets_dir()
     templates = {
-        'ans': str(project_dir / 'assets' / 'Hoja_rotacion_ans.pdf'),
-        'rev': str(project_dir / 'assets' / 'Hoja_rotacion_rev.pdf'),
+        'ans': os.path.join(assets_dir, 'Hoja_rotacion_ans.pdf'),
+        'rev': os.path.join(assets_dir, 'Hoja_rotacion_rev.pdf'),
     }
 
     faltantes = [k for k, v in templates.items() if not os.path.exists(v)]
@@ -184,13 +200,13 @@ def generar_examen_desde_db(grado: str = None, desde_csv: str = None, out_dir: s
     if not alumnos:
         return {'ok': False, 'error': 'No hay alumnos para generar hojas', 'generados': 0}
 
-    project_dir = pathlib.Path(__file__).parent.parent
-    template = str(project_dir / 'assets' / 'Hoja_respuestas.pdf')
+    assets_dir = _get_assets_dir()
+    template = os.path.join(assets_dir, 'Hoja_respuestas.pdf')
 
     if not os.path.exists(template):
         return {
             'ok': False,
-            'error': 'Falta plantilla PDF: assets/Hoja_respuestas.pdf',
+            'error': f'Falta plantilla PDF: {template}',
             'generados': 0
         }
 
@@ -199,7 +215,7 @@ def generar_examen_desde_db(grado: str = None, desde_csv: str = None, out_dir: s
     orig_out = gh.OUT_DIR_EXAMEN
 
     gh.TEMPLATE_EXAMEN = template
-    gh.FONT_TTC = str(project_dir / 'assets' / 'Avenir.ttc')
+    gh.FONT_TTC = os.path.join(assets_dir, 'Avenir.ttc')
     gh.OUT_DIR_EXAMEN = final_out_dir
 
     gh.register_font()

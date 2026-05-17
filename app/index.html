@@ -147,7 +147,7 @@
 
     <!-- EXÁMENES -->
     <section class="section" id="sec-examenes">
-      <div class="tab-group"><button class="tab-btn active" onclick="switchTab(this,'exam-generar')">📄 Generar Hojas</button><button class="tab-btn" onclick="switchTab(this,'exam-importar')">📂 Importar calificación</button><button class="tab-btn" onclick="switchTab(this,'exam-resultados')">📊 Resultados</button><button class="tab-btn btn-ghost" onclick="abrirModalManual('examen')">✍️ Registro Manual</button></div>
+      <div class="tab-group"><button class="tab-btn active" onclick="switchTab(this,'exam-generar')">📄 Generar Hojas</button><button class="tab-btn" onclick="switchTab(this,'exam-importar')">📂 Importar calificación</button><button class="tab-btn" id="btn-exam-resultados" onclick="switchTab(this,'exam-resultados'); cargarResultadosExamen();">📊 Resultados</button><button class="tab-btn btn-ghost" onclick="abrirModalManual('examen')">✍️ Registro Manual</button></div>
       
       <div id="tab-exam-generar" class="tab-panel">
         <div class="card">
@@ -160,7 +160,7 @@
 
       <div id="tab-exam-importar" class="tab-panel" style="display:none">
         <div class="card" id="card-upload-exam">
-          <div style="display:flex; justify-content:space-between; align-items:center;"><div class="card-title" style="margin-bottom:0;">Pizarrón de Previsualización (Exámenes)</div><button class="btn btn-gold btn-sm" onclick="abrirModalCampana('examen')">🔔 Aplicar Campana</button></div>
+          <div class="card-title">Pizarrón de Previsualización (Exámenes)</div>
           <p class="text-muted text-sm" style="margin-top:8px; margin-bottom:14px">Selecciona tu CSV. Podrás ajustar puntos manuales o grupales (+/-) <strong>antes</strong> de guardarlos.</p>
           <div class="form-row" style="margin-bottom:14px">
             <div class="form-group"><label class="form-label">Materia</label><select class="form-control" id="exam-import-materia" onchange="onMateriaCambio()"><option value="Cirugía">Cirugía</option><option value="Medicina Interna">Medicina Interna</option><option value="Pediatría">Pediatría</option><option value="GyO">GyO</option><option value="Urg-Fam">Urgencias - Familiar</option><option value="Troncal">Troncal (Aplica a todas)</option></select></div>
@@ -171,7 +171,7 @@
         <div class="card" id="card-preview-exam" style="display:none; margin-top:16px; border-color:var(--primary);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
             <div class="card-title" style="margin:0;">👀 Vista Previa de Asignación</div>
-            <div style="display:flex; gap:10px; align-items:center;"><span class="text-sm text-muted">Ajuste Global (+/-)</span><input type="number" id="preview-global-extra" class="form-control" style="width:70px;" value="0" step="0.1"><button class="btn btn-ghost btn-sm" onclick="aplicarExtraGlobalPreview()">Aplicar a Todos</button></div>
+            <div style="display:flex; gap:10px; align-items:center;"><button class="btn btn-gold btn-sm" onclick="abrirModalCampana('examen')">🔔 Aplicar Campana</button><span class="text-sm text-muted">Ajuste Global (+/-)</span><input type="number" id="preview-global-extra" class="form-control" style="width:70px;" value="0" step="0.1"><button class="btn btn-ghost btn-sm" onclick="aplicarExtraGlobalPreview()">Aplicar a Todos</button></div>
           </div>
           <div class="table-wrap" style="max-height:400px; overflow-y:auto;"><table><thead><tr><th>ID</th><th>Nombre</th><th>Grado</th><th>Cal. Base</th><th>Ajuste Ind.</th><th>Total (Máx 100)</th></tr></thead><tbody id="tbody-preview-exam"></tbody></table></div>
           <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;"><button class="btn btn-ghost" onclick="cancelarPreview()">Cancelar</button><button class="btn btn-primary" onclick="confirmarYGuardarLote()">✅ Confirmar y Guardar Todo</button></div>
@@ -180,10 +180,10 @@
 
       <div id="tab-exam-resultados" class="tab-panel" style="display:none">
         <div class="filters-bar" style="margin-bottom:14px">
-          <select class="form-control" style="width:160px" id="exam-res-materia" onchange="cargarResultadosExamen()"><option value="Cirugía">Cirugía</option><option value="Medicina Interna">Medicina Interna</option><option value="Pediatría">Pediatría</option><option value="GyO">GyO</option><option value="Urg-Fam">Urgencias - Familiar</option><option value="Troncal">Troncal</option></select>
+          <select class="form-control" style="width:160px" id="exam-res-materia" onchange="cargarResultadosExamen()"><option value="Cirugía">Cirugía</option><option value="Medicina Interna">Medicina Interna</option><option value="Pediatría">Pediatría</option><option value="GyO">GyO</option><option value="Urgencias">Urgencias</option><option value="Familiar">Familiar</option></select>
           <select class="form-control" style="width:130px" id="exam-res-tipo" onchange="cargarResultadosExamen()"><option value="parcial">Parcial</option><option value="final">Final</option><option value="remedial">Remedial</option><option value="troncal">Troncal</option></select>
           <div style="display:flex; gap:8px;">
-            <button class="btn btn-success btn-sm" onclick="exportarResultadosExamen()">⬇ Descargar Excel</button>
+            <button class="btn btn-success btn-sm" onclick="abrirModalExportResultados()">⬇ Descargar Excel</button>
           </div>
         </div>
         <div class="tab-group" style="margin-bottom:14px;">
@@ -244,7 +244,7 @@
 
       <div id="tab-cal-estadisticas" class="tab-panel" style="display:none">
         <div class="filters-bar" style="margin-bottom:14px; margin-top:10px;">
-          <select class="form-control" style="width:160px" id="cal-exam-materia" onchange="cargarGraficosExamen()"><option value="Cirugía">Cirugía</option><option value="Medicina Interna">Medicina Interna</option><option value="Pediatría">Pediatría</option><option value="GyO">GyO</option><option value="Urg-Fam">Urgencias - Familiar</option></select>
+          <select class="form-control" style="width:160px" id="cal-exam-materia" onchange="cargarGraficosExamen()"><option value="Cirugía">Cirugía</option><option value="Medicina Interna">Medicina Interna</option><option value="Pediatría">Pediatría</option><option value="GyO">GyO</option><option value="Urgencias">Urgencias</option><option value="Familiar">Familiar</option></select>
           <select class="form-control" style="width:130px" id="cal-exam-tipo" onchange="cargarGraficosExamen()"><option value="parcial">Parcial</option><option value="final">Final</option><option value="remedial">Remedial</option></select>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
@@ -275,6 +275,14 @@
               <button class="btn btn-primary" onclick="exportarBaseDatos()">📤 Exportar Base de Datos al Escritorio</button>
               <button class="btn btn-ghost" onclick="importarBaseDatos()" style="border:1px solid var(--border);">📥 Importar "Respaldo_HE_Academico.db"</button>
               <button class="btn btn-danger mt-2" onclick="wipeDatabase()">☢️ Borrar TODA la información (Dejar de Fábrica)</button>
+            </div>
+          </div>
+          <div class="card" style="border-color:var(--primary);">
+            <div class="card-title" style="color:var(--primary);">🗂️ Importar Formato Antiguo</div>
+            <p class="text-sm text-muted" style="margin-bottom:14px;">Importa tu base de datos histórica de exámenes y rotaciones desde los archivos Excel del ciclo anterior. Requiere contraseña.</p>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+              <button class="btn btn-ghost" style="border:1px solid var(--primary);" onclick="abrirImportarAntiguo('examenes')">📊 Importar Exámenes (formato antiguo)</button>
+              <button class="btn btn-ghost" style="border:1px solid var(--primary);" onclick="abrirImportarAntiguo('rotaciones')">🔄 Importar Rotaciones (formato antiguo)</button>
             </div>
           </div>
         </div>
@@ -317,6 +325,116 @@
       <button class="btn btn-ghost" onclick="closeModal('modal-exportar-lista')">Cancelar</button>
       <button class="btn btn-success btn-sm" onclick="ejecutarExportarLista()">⬇ Excel</button>
       <button class="btn btn-primary btn-sm" onclick="ejecutarExportarListaPDF()">⬇ PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Selección de ciclo para descarga de resultados -->
+<div class="modal-overlay" id="modal-export-resultados">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header"><div class="modal-title">⬇ Descargar Excel de Resultados</div><button class="btn btn-ghost btn-icon" onclick="closeModal('modal-export-resultados')">✕</button></div>
+    <div class="modal-body">
+      <p class="text-sm text-muted" style="margin-bottom:16px;">Selecciona qué ciclo(s) deseas incluir en el archivo Excel.</p>
+      <div class="form-group">
+        <label class="form-label">Ciclo a exportar</label>
+        <select class="form-control" id="export-res-ciclo-opt">
+          <option value="actual">✅ Ciclo actual (por defecto)</option>
+          <option value="anterior">📅 Ciclo anterior (cuando eran MIP 1)</option>
+          <option value="ambos">📋 Ambos ciclos (en hojas separadas)</option>
+        </select>
+      </div>
+      <p class="text-xs text-muted" style="margin-top:10px;">La opción «Ambos» es útil para ver la progresión de los MIP 2.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-export-resultados')">Cancelar</button>
+      <button class="btn btn-success" onclick="confirmarExportResultados()">⬇ Descargar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Editar calificaciones de alumno -->
+<div class="modal-overlay" id="modal-editar-cal">
+  <div class="modal" style="max-width:500px;">
+    <div class="modal-header">
+      <div class="modal-title">✏️ Editar Calificación — <span id="editar-cal-nombre"></span></div>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-editar-cal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="text-sm text-muted" style="margin-bottom:16px;">Selecciona la materia y el tipo de evaluación a modificar.</p>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Materia</label>
+          <select class="form-control" id="editar-cal-materia" onchange="onEditarCalChange()">
+            <option value="GyO">GyO</option>
+            <option value="Medicina Interna">Medicina Interna</option>
+            <option value="Cirugía">Cirugía</option>
+            <option value="Pediatría">Pediatría</option>
+            <option value="Familiar">Familiar</option>
+            <option value="Urgencias">Urgencias</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Tipo</label>
+          <select class="form-control" id="editar-cal-tipo" onchange="onEditarCalChange()">
+            <option value="parcial">📝 Parcial</option>
+            <option value="final">📋 Final</option>
+            <option value="remedial">🔄 Remedial</option>
+            <option value="troncal">🏆 Troncal</option>
+            <option value="rotacion">🏥 Rotación</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Estado actual -->
+      <div class="card" style="padding:14px; margin-bottom:14px; background:var(--surface-2);">
+        <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">Valor actual registrado</div>
+        <div id="editar-cal-actual" style="font-size:22px; font-weight:700; color:var(--primary);">—</div>
+        <div id="editar-cal-registro-info" style="font-size:11px; color:var(--text-muted); margin-top:4px;"></div>
+      </div>
+
+      <!-- Nuevo valor -->
+      <div class="form-group">
+        <label class="form-label">Nuevo valor (0 – 100)</label>
+        <input type="number" id="editar-cal-valor" class="form-control" min="0" max="100" step="0.5"
+               placeholder="Ej. 75.5" style="font-size:18px; font-weight:bold;">
+        <p class="text-xs text-muted" style="margin-top:6px;">Dejar vacío o 0 para marcar como No Presentó (elimina el registro).</p>
+      </div>
+
+      <div class="card" style="background:rgba(231,76,60,.08); border-color:var(--danger); padding:12px;">
+        <div style="font-size:13px; font-weight:600; color:var(--danger); margin-bottom:8px;">🔐 Verificación</div>
+        <input type="password" id="editar-cal-pwd" class="form-control" placeholder="Contraseña del sistema" style="margin-bottom:0;">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-editar-cal')">Cancelar</button>
+      <button class="btn btn-danger" onclick="guardarEdicionCal()">✅ Guardar Cambio</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Importar formato antiguo -->
+<div class="modal-overlay" id="modal-importar-antiguo">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <div class="modal-title">🗂️ Importar Formato Antiguo — <span id="importar-antiguo-tipo-lbl"></span></div>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-importar-antiguo')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="text-sm text-muted" style="margin-bottom:14px;">Selecciona el ciclo al que se asignarán las calificaciones importadas y luego carga el archivo.</p>
+      <div class="form-group">
+        <label class="form-label">Ciclo destino</label>
+        <input class="form-control" id="importar-antiguo-ciclo" placeholder="ej. 2025-2">
+      </div>
+      <div class="card" style="background:rgba(231,76,60,.08); border-color:var(--danger); padding:14px; margin-bottom:14px;">
+        <div style="font-size:13px; font-weight:600; color:var(--danger); margin-bottom:10px;">🔐 Verificación de identidad</div>
+        <input type="password" id="importar-antiguo-pwd" class="form-control" placeholder="Contraseña del sistema" style="margin-bottom:0;">
+      </div>
+      <div id="importar-antiguo-result" style="display:none;" class="card" style="margin-top:8px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-importar-antiguo')">Cancelar</button>
+      <button class="btn btn-primary" onclick="ejecutarImportarAntiguo()">📂 Seleccionar Archivo e Importar</button>
     </div>
   </div>
 </div>

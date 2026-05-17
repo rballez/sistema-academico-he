@@ -31,11 +31,13 @@ def recalcular_todo(ciclo: str = None, usar_troncal: bool = True, usar_remedial:
     if ciclo is None: ciclo = get_ciclo_actual()
     conn = get_connection()
     try: 
-        # AUTO-SANADOR: Etiquetar exámenes "huérfanos" (manuales viejos) con el grado real del alumno
+        # AUTO-SANADOR: Etiquetar exámenes con el grado real del alumno cuando
+        # grado_ref no es exactamente 'MIP 1' o 'MIP 2' (nulo, vacío, mal formateado, etc.)
+        # Nota: NULL NOT IN (...) evalúa a NULL en SQLite, por eso se incluye IS NULL aparte.
         conn.execute("""
-            UPDATE examenes_raw 
-            SET grado_ref = (SELECT grado FROM alumnos WHERE alumnos.mip_id = examenes_raw.student_id) 
-            WHERE grado_ref IS NULL OR grado_ref = '' OR grado_ref = 'None'
+            UPDATE examenes_raw
+            SET grado_ref = (SELECT grado FROM alumnos WHERE alumnos.mip_id = examenes_raw.student_id)
+            WHERE grado_ref IS NULL OR grado_ref NOT IN ('MIP 1', 'MIP 2')
         """)
         conn.commit()
 
@@ -139,22 +141,34 @@ def get_tabla_examenes(materia: str, tipo_examen: str, grado: str = None, ciclo:
     conn = get_connection()
     try:
         # HISTORIAL COMPLETO para Resultados. Se omitió ciclo en los sub-selects.
+        # max_score = mejor score sin importar grado_ref (cubre datos del formato antiguo)
         query = """
             SELECT a.mip_id, a.nombre_completo as nombre, a.grado, u.nombre as universidad,
                 (SELECT MAX(percent_correct) FROM examenes_raw WHERE student_id=a.mip_id AND materia=? AND tipo_examen=? AND grado_ref='MIP 1') as mip1_score,
-                (SELECT MAX(percent_correct) FROM examenes_raw WHERE student_id=a.mip_id AND materia=? AND tipo_examen=? AND grado_ref='MIP 2') as mip2_score
+                (SELECT MAX(percent_correct) FROM examenes_raw WHERE student_id=a.mip_id AND materia=? AND tipo_examen=? AND grado_ref='MIP 2') as mip2_score,
+                (SELECT MAX(percent_correct) FROM examenes_raw WHERE student_id=a.mip_id AND materia=? AND tipo_examen=?) as max_score
             FROM alumnos a
             LEFT JOIN universidades u ON a.universidad_id = u.id
             WHERE a.activo=1
         """
-        params = [materia, tipo_examen, materia, tipo_examen]
+        params = [materia, tipo_examen, materia, tipo_examen, materia, tipo_examen]
         # grado=None → traer todos; grado especificado → filtrar
         if grado:
             query += " AND a.grado=?"
             params.append(grado)
         query += " ORDER BY a.ap_paterno, a.nombres"
-        return rows_to_list(conn.execute(query, params).fetchall())
+        rows = rows_to_list(conn.execute(query, params).fetchall())
+        # Si el alumno no tiene score diferenciado por grado_ref (datos formato antiguo),
+        # lo ponemos en la columna del grado actual del alumno.
+        for r in rows:
+            if r['mip1_score'] is None and r['mip2_score'] is None and r['max_score'] is not None:
+                if r['grado'] == 'MIP 1':
+                    r['mip1_score'] = r['max_score']
+                else:
+                    r['mip2_score'] = r['max_score']
+        return rows
     finally: conn.close()
+
 
 def get_top_3_examenes(ciclo: str = None) -> dict:
     if ciclo is None: ciclo = get_ciclo_actual()

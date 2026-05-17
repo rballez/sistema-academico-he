@@ -70,3 +70,20 @@ scripts/after-sign.js
 # ── Electron artifacts ────────────────────────────────────────────────────────
 *.dmg
 *.blockmap
+
+# ── Datos privados / históricos de alumnos (NO subir a GitHub) ────────────────
+# Archivos Excel con calificaciones reales — solo uso local
+assets/EXAMENES.xlsx
+assets/ROTACIONES.xlsx
+assets/*.xlsx
+assets/*.xls
+
+# ── Firma de código Apple (certificados y perfiles) ───────────────────────────
+*.p12
+*.cer
+*.mobileprovision
+*.provisionprofile
+entitlements.mac.plist
+
+# ── Configuración local de electron-builder ────────────────────────────────────
+electron-builder.env

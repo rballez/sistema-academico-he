@@ -199,12 +199,28 @@ ipcMain.handle('py:call', async (_evt, action, payload) => {
 ipcMain.handle('dialog:openCSV', async (_evt, title = 'Seleccionar CSV') => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title,
-    filters: [{ name: 'CSV', extensions: ['csv'] }],
+    filters: [{ name: 'CSV / Excel', extensions: ['csv', 'xlsx'] }],
     properties: ['openFile'],
   });
   if (result.canceled || !result.filePaths.length) return null;
   const filePath = result.filePaths[0];
-  const content  = fs.readFileSync(filePath, 'utf-8');
+  const ext = path.extname(filePath).toLowerCase();
+
+  if (ext === '.xlsx') {
+    // Convertir Excel a CSV usando la librería xlsx
+    try {
+      const XLSX = require('xlsx');
+      const wb = XLSX.readFile(filePath);
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const content = XLSX.utils.sheet_to_csv(ws);
+      return { path: filePath, name: path.basename(filePath), content };
+    } catch (e) {
+      console.error('[XLSX] Error al convertir:', e.message);
+      return null;
+    }
+  }
+
+  const content = fs.readFileSync(filePath, 'utf-8');
   return { path: filePath, name: path.basename(filePath), content };
 });
 
@@ -227,6 +243,19 @@ ipcMain.handle('dialog:openDirectory', async (_evt, title = 'Seleccionar Carpeta
   return result.canceled || !result.filePaths.length ? null : result.filePaths[0];
 });
 
+// NUEVO: Abre un archivo .xlsx y devuelve su contenido como base64 (para importación formato antiguo)
+ipcMain.handle('dialog:openXLSX', async (_evt, title = 'Seleccionar Excel') => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title,
+    filters: [{ name: 'Excel', extensions: ['xlsx', 'xls'] }],
+    properties: ['openFile'],
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+  const filePath = result.filePaths[0];
+  const content = fs.readFileSync(filePath);
+  return { path: filePath, name: path.basename(filePath), content_b64: content.toString('base64') };
+});
+
 ipcMain.handle('shell:openFolder', async (_evt, folderPath) => {
   shell.openPath(folderPath);
 });
@@ -243,16 +272,29 @@ app.whenReady().then(() => {
   createWindow();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    // En macOS: si la ventana fue cerrada con ⌘W, la reactivamos sin recrear.
+    // Si por alguna razón no hay ventana, creamos una nueva.
+    const wins = BrowserWindow.getAllWindows();
+    if (wins.length === 0) {
+      // Asegurarse que Python siga vivo antes de crear la ventana
+      if (!pyProcess) startPython();
+      createWindow();
+    } else {
+      wins[0].show();
+    }
   });
 });
 
 app.on('window-all-closed', () => {
-  if (pyProcess) {
-    pyProcess.stdin.end();
-    pyProcess.kill();
+  if (process.platform !== 'darwin') {
+    // En Windows/Linux, matar Python y salir al cerrar la ventana
+    if (pyProcess) {
+      pyProcess.stdin.end();
+      pyProcess.kill();
+    }
+    app.quit();
   }
-  if (process.platform !== 'darwin') app.quit();
+  // En macOS: NO matar Python ni cerrar la app — solo se cierra la ventana
 });
 
 app.on('before-quit', () => {
