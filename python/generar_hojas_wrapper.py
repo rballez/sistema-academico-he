@@ -99,7 +99,7 @@ def _merge_pdfs_by_guardia(pdf_map: dict, out_dir: str, prefijo: str) -> dict:
     return combinados
 
 
-def generar_rotacion_desde_db(grado: str = None, desde_csv: str = None, out_dir: str = None) -> dict:
+def generar_rotacion_desde_db(grado: str = None, desde_csv: str = None, desde_csv_ruta: str = None, out_dir: str = None) -> dict:
     import generar_hojas as gh
 
     final_out_dir = os.path.join(_get_output_dir(out_dir), 'Rotacion')
@@ -107,6 +107,9 @@ def generar_rotacion_desde_db(grado: str = None, desde_csv: str = None, out_dir:
 
     if desde_csv:
         alumnos = _parse_csv_guardias(desde_csv)
+    elif desde_csv_ruta:
+        alumnos = _parse_xlsx_guardias(desde_csv_ruta)
+        desde_csv = True  # Marca para activar el modo guardia (combinar por guardia)
     else:
         alumnos = ga.listar_alumnos(grado=grado)
 
@@ -186,7 +189,7 @@ def generar_rotacion_desde_db(grado: str = None, desde_csv: str = None, out_dir:
     }
 
 
-def generar_examen_desde_db(grado: str = None, desde_csv: str = None, out_dir: str = None) -> dict:
+def generar_examen_desde_db(grado: str = None, desde_csv: str = None, desde_csv_ruta: str = None, out_dir: str = None) -> dict:
     import generar_hojas as gh
 
     final_out_dir = os.path.join(_get_output_dir(out_dir), 'Examen')
@@ -194,6 +197,9 @@ def generar_examen_desde_db(grado: str = None, desde_csv: str = None, out_dir: s
 
     if desde_csv:
         alumnos = _parse_csv_guardias(desde_csv)
+    elif desde_csv_ruta:
+        alumnos = _parse_xlsx_guardias(desde_csv_ruta)
+        desde_csv = True  # Marca para activar el modo guardia (combinar por guardia)
     else:
         alumnos = ga.listar_alumnos(grado=grado)
 
@@ -281,6 +287,28 @@ def _parse_csv_guardias(contenido_csv: str) -> list:
         nombre = row_norm.get('nombre', '')
         parts = nombre.split()
 
+        alumnos.append({
+            'nombre': nombre,
+            'ap_paterno': parts[0] if len(parts) > 0 else '',
+            'ap_materno': parts[1] if len(parts) > 1 else '',
+            'nombres': ' '.join(parts[2:]) if len(parts) > 2 else '',
+            'mip_id': row_norm.get('id', ''),
+            'grado': row_norm.get('grado', ''),
+            'guardia': row_norm.get('guardia', ''),
+            'universidad_nombre': row_norm.get('universidad', ''),
+        })
+    return alumnos
+
+
+def _parse_xlsx_guardias(ruta: str) -> list:
+    """Lee un archivo xlsx/xls de guardias usando lector_archivos."""
+    import lector_archivos
+    rows = lector_archivos.read_rows_from_file(ruta)
+    alumnos = []
+    for row in rows:
+        row_norm = {k.strip().lower(): (str(v).strip() if v is not None else '') for k, v in row.items()}
+        nombre = row_norm.get('nombre', '')
+        parts = nombre.split()
         alumnos.append({
             'nombre': nombre,
             'ap_paterno': parts[0] if len(parts) > 0 else '',

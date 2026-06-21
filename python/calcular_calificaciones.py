@@ -170,18 +170,28 @@ def get_tabla_examenes(materia: str, tipo_examen: str, grado: str = None, ciclo:
     finally: conn.close()
 
 
-def get_top_3_examenes(ciclo: str = None) -> dict:
+def get_top_3_examenes(ciclo: str = None, materia: str = None, tipo_examen: str = None, grado: str = None) -> dict:
     if ciclo is None: ciclo = get_ciclo_actual()
     conn = get_connection()
     try:
-        query = """
-            SELECT a.nombre_completo as nombre, a.grado, u.nombre as escuela, AVG(e.percent_correct) as prom
-            FROM examenes_raw e JOIN alumnos a ON e.student_id = a.mip_id LEFT JOIN universidades u ON a.universidad_id = u.id
-            WHERE e.ciclo=? AND a.activo=1 GROUP BY a.mip_id ORDER BY prom DESC
-        """
-        todos = rows_to_list(conn.execute(query, (ciclo,)).fetchall())
+        if materia:
+            query = """SELECT a.nombre_completo as nombre, a.grado, u.nombre as escuela, AVG(e.percent_correct) as prom
+                FROM examenes_raw e JOIN alumnos a ON e.student_id = a.mip_id LEFT JOIN universidades u ON a.universidad_id = u.id
+                WHERE e.materia=? AND a.activo=1"""
+            params = [materia]
+            if tipo_examen: query += " AND e.tipo_examen=?"; params.append(tipo_examen)
+            if grado: query += " AND a.grado=?"; params.append(grado)
+        else:
+            query = """SELECT a.nombre_completo as nombre, a.grado, u.nombre as escuela, AVG(e.percent_correct) as prom
+                FROM examenes_raw e JOIN alumnos a ON e.student_id = a.mip_id LEFT JOIN universidades u ON a.universidad_id = u.id
+                WHERE e.ciclo=? AND a.activo=1"""
+            params = [ciclo]
+            if grado: query += " AND a.grado=?"; params.append(grado)
+        query += " GROUP BY a.mip_id ORDER BY prom DESC"
+        todos = rows_to_list(conn.execute(query, params).fetchall())
         return {'mip1': [x for x in todos if x['grado'] == 'MIP 1'][:3], 'mip2': [x for x in todos if x['grado'] == 'MIP 2'][:3]}
     finally: conn.close()
+
 
 def get_vista_global_examenes(ciclo: str = None, usar_troncal: bool = True, usar_remedial: bool = True) -> list:
     if ciclo is None: ciclo = get_ciclo_actual()

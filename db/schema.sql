@@ -36,8 +36,8 @@ CREATE TABLE IF NOT EXISTS universidades (
 INSERT OR IGNORE INTO universidades (codigo, nombre, ccc, logo_path) VALUES
     ('LSC', 'La Salle CDMX',        '050', 'assets/logos/lasalle_cdmx.png'),
     ('LSV', 'La Salle Victoria',    '051', 'assets/logos/lasalle_victoria.png'),
-    ('ANS', 'Anáhuac Sur',          '020', 'assets/logos/anahuac_sur.png'),
-    ('ANN', 'Anáhuac Norte',        '021', 'assets/logos/anahuac_norte.png'),
+    ('BUA', 'BUAP',                  '020', 'assets/logos/BUAP.png'),
+    ('ANN', 'Anáhuac',              '021', 'assets/logos/ANAH.png'),
     ('IPN', 'IPN',                  '210', 'assets/logos/ipn.png'),
     ('UNA', 'UNAM',                 '290', 'assets/logos/unam.png'),
     ('UNS', 'UNSA',                 '740', 'assets/logos/unsa.png'),

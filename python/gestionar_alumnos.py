@@ -113,41 +113,115 @@ def egresar_alumno_individual(mip_id: str) -> dict:
         return {'ok': True}
     finally: conn.close()
 
-def importar_alumnos_csv(contenido_csv: str) -> dict:
+def importar_alumnos_csv(ruta_archivo: str = None, contenido_csv: str = None) -> dict:
+    import lector_archivos
+    import hashlib
+    import os
     ok, errores = [], []
     ciclo_global = get_ciclo_actual()
-    try: delimiter = csv.Sniffer().sniff(contenido_csv[:2048], delimiters=',;|\t').delimiter
-    except Exception: delimiter = ','
-    reader = csv.DictReader(io.StringIO(contenido_csv), delimiter=delimiter)
-    fieldnames_lower = {k.lower().strip(): k for k in (reader.fieldnames or [])}
 
-    def get_field(row, *keys):
-        for k in keys:
-            for fn_low, fn_orig in fieldnames_lower.items():
-                if k in fn_low: return row.get(fn_orig, '').strip()
-        return ''
+    rows = []
+    if ruta_archivo:
+        try:
+            rows = lector_archivos.read_rows_from_file(ruta_archivo)
+        except Exception as e:
+            return {'ok': [], 'errores': [{'fila': 0, 'error': f'Error al leer archivo: {str(e)}'}], 'total': 0}
+    elif contenido_csv:
+        try:
+            delimiter = csv.Sniffer().sniff(contenido_csv[:2048], delimiters=',;|\t').delimiter
+        except Exception:
+            delimiter = ','
+        reader = csv.DictReader(io.StringIO(contenido_csv), delimiter=delimiter)
+        for row in reader:
+            if not any(row.values()):
+                continue
+            cleaned_row = {k.strip(): v.strip() if v is not None else "" for k, v in row.items() if k is not None}
+            rows.append(cleaned_row)
+    else:
+        return {'ok': [], 'errores': [{'fila': 0, 'error': 'No se proporcionó archivo ni contenido'}], 'total': 0}
 
     conn = get_connection()
-    for i, row in enumerate(reader, start=2):
-        ap_paterno = get_field(row, 'paterno', 'apellido_p').upper()
-        ap_materno = get_field(row, 'materno', 'apellido_m').upper()
-        nombres    = get_field(row, 'nombre', 'nombre').upper()
-        univ_code  = get_field(row, 'universidad', 'escuela', 'univ').upper()
-        mip_id_csv = get_field(row, 'mip_id', 'id', 'matricula')
-        grado_csv  = get_field(row, 'grado', 'nivel') or 'MIP 1'
-        
-        ciclo_csv = get_field(row, 'ciclo', 'periodo')
-        if not ciclo_csv: ciclo_csv = ciclo_global
+    try:
+        for i, row in enumerate(rows, start=2):
+            fieldnames_lower = {k.lower().strip(): k for k in row.keys()}
 
-        if not ap_paterno or not nombres or not univ_code: errores.append({'fila': i, 'error': 'Datos incompletos'}); continue
-        univ = conn.execute("SELECT id FROM universidades WHERE codigo=? OR nombre LIKE ?", (univ_code, f'%{univ_code}%')).fetchone()
-        if not univ: errores.append({'fila': i, 'error': f'Universidad no encontrada: {univ_code}'}); continue
+            def get_field(row, *keys):
+                for k in keys:
+                    for fn_low, fn_orig in fieldnames_lower.items():
+                        if k in fn_low:
+                            val = row.get(fn_orig)
+                            return str(val).strip() if val is not None else ''
+                return ''
 
-        try:
-            alumno = crear_alumno(mip_id_csv, ap_paterno, ap_materno, nombres, univ['id'], grado_csv, ciclo_csv)
-            ok.append(alumno)
-        except Exception as e: errores.append({'fila': i, 'error': str(e)})
-    conn.close()
+            ap_paterno = get_field(row, 'paterno', 'apellido_p').upper()
+            ap_materno = get_field(row, 'materno', 'apellido_m').upper()
+            nombres    = get_field(row, 'nombre', 'nombre').upper()
+            univ_code  = get_field(row, 'universidad', 'escuela', 'univ').upper()
+            mip_id_csv = get_field(row, 'mip_id', 'id', 'matricula')
+            grado_csv  = get_field(row, 'grado', 'nivel') or 'MIP 1'
+
+            ciclo_csv = get_field(row, 'ciclo', 'periodo')
+            if not ciclo_csv:
+                ciclo_csv = ciclo_global
+
+            if not ap_paterno or not nombres or not univ_code:
+                errores.append({'fila': i, 'error': 'Datos incompletos (Paterno, Nombre o Universidad vacíos)'})
+                continue
+            univ = conn.execute("SELECT id FROM universidades WHERE codigo=? OR nombre LIKE ?", (univ_code, f'%{univ_code}%')).fetchone()
+            if not univ:
+                errores.append({'fila': i, 'error': f'Universidad no encontrada: {univ_code}'})
+                continue
+
+            # Check if student exists by mip_id (if provided) or by name + university + cycle
+            alumno_existente = None
+            if mip_id_csv:
+                alumno_existente = conn.execute("SELECT mip_id FROM alumnos WHERE mip_id=?", (mip_id_csv,)).fetchone()
+            else:
+                alumno_existente = conn.execute(
+                    "SELECT mip_id FROM alumnos WHERE ap_paterno=? AND nombres=? AND universidad_id=? AND ciclo_ingreso=?",
+                    (ap_paterno.upper(), nombres.upper(), univ['id'], ciclo_csv)
+                ).fetchone()
+
+            if alumno_existente:
+                # Update existing student
+                target_id = alumno_existente['mip_id']
+                try:
+                    conn.execute("""
+                        UPDATE alumnos 
+                        SET ap_paterno=?, ap_materno=?, nombres=?, universidad_id=?, grado=?, ciclo_ingreso=?, activo=1 
+                        WHERE mip_id=?
+                    """, (ap_paterno.upper(), ap_materno.upper(), nombres.upper(), univ['id'], grado_csv, ciclo_csv, target_id))
+                    conn.commit()
+                    alumno = dict(conn.execute("SELECT * FROM alumnos WHERE mip_id=?", (target_id,)).fetchone())
+                    ok.append(alumno)
+                except Exception as e:
+                    errores.append({'fila': i, 'error': f'Error al actualizar: {str(e)}'})
+            else:
+                # Insert new student directly
+                try:
+                    if not mip_id_csv:
+                        # We need to generate a mip_id
+                        mip_id_csv = generar_mip_id(univ['id'], ciclo_csv)
+                    conn.execute("INSERT INTO alumnos (mip_id, ap_paterno, ap_materno, nombres, universidad_id, grado, ciclo_ingreso) VALUES (?,?,?,?,?,?,?)", 
+                                 (mip_id_csv, ap_paterno.upper(), ap_materno.upper(), nombres.upper(), univ['id'], grado_csv, ciclo_csv))
+                    conn.commit()
+                    alumno = dict(conn.execute("SELECT * FROM alumnos WHERE mip_id=?", (mip_id_csv,)).fetchone())
+                    ok.append(alumno)
+                except Exception as e:
+                    errores.append({'fila': i, 'error': str(e)})
+
+        # Log this import to historial_importaciones if we successfully imported/updated any
+        if ok:
+            imported_ids = [a['mip_id'] for a in ok]
+            import_hash = hashlib.sha256(str(imported_ids).encode('utf-8')).hexdigest()
+            filename = os.path.basename(ruta_archivo) if ruta_archivo else 'importacion_alumnos.csv'
+            conn.execute(
+                "INSERT INTO historial_importaciones (tipo, archivo_nombre, archivo_hash, ciclo, registros_total, registros_ok, registros_skip, registros_dup, notas) VALUES ('alumnos_csv', ?, ?, ?, ?, ?, ?, ?, ?)",
+                (filename, import_hash, ciclo_global, len(ok)+len(errores), len(ok), len(errores), 0, ",".join(imported_ids))
+            )
+            conn.commit()
+    finally:
+        conn.close()
     return {'ok': ok, 'errores': errores, 'total': len(ok) + len(errores)}
 
 def eliminar_alumno(mip_id: str) -> bool:

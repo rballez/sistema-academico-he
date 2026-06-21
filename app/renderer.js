@@ -1,7 +1,7 @@
 /* renderer.js — Versión 1.0.0 (Completa y Depurada) */
 'use strict';
 
-let allAlumnos = [], allUniversidades = [], rotGuardiaCsv = null, examGuardiaCsv = null, chartUniv = null, chartDist = null;
+let allAlumnos = [], allUniversidades = [], rotGuardiaCsv = null, examGuardiaCsv = null, rotGuardiaPath = null, examGuardiaPath = null, chartUniv = null, chartDist = null;
 let examPreviewLote = [];
 let cacheDataGlobal = [];
 let cacheDataMega = [];
@@ -13,7 +13,7 @@ let resSortDir = 'desc'; // 'asc' | 'desc'
 let cacheResultados = [];
 
 const cMap = { 'GyO': 'var(--c-gyo)', 'Pediatría': 'var(--c-pedia)', 'Cirugía': 'var(--c-ciru)', 'Medicina Interna': 'var(--c-mi)', 'Urgencias': 'var(--c-urg)', 'Familiar': 'var(--c-fam)' };
-const MAPA_LOGOS = { 'ANÁHUAC NORTE': 'ANAH', 'ANÁHUAC SUR': 'ANAH', 'IPN': 'IPN', 'ESM/IPN': 'IPN', 'LA SALLE CDMX': 'LSALLE', 'LA SALLE VICTORIA': 'LSALLE', 'MONTRER': 'MONT', 'SAINT LUKE': 'STLK', 'UAEH': 'UAEH', 'UNAM': 'UNAM', 'UNSA': 'UNSA', 'WESTHILL': 'WEST', 'TOMINAGA NAKAMOTO': 'TOMI', 'EXTRANJEROS': 'EXTRANJEROS', 'INTERCAMBIO': 'INTERCAMBIO', 'UNAM FES ZARAGOZA': 'UNAM', 'BUAP': 'OTROS' };
+const MAPA_LOGOS = { 'ANÁHUAC': 'ANAH', 'ANAHUAC': 'ANAH', 'ANÁHUAC NORTE': 'ANAH', 'BUAP': 'BUAP', 'ANÁHUAC SUR': 'BUAP', 'IPN': 'IPN', 'ESM/IPN': 'IPN', 'LA SALLE CDMX': 'LSALLE', 'LA SALLE VICTORIA': 'LSALLE', 'MONTRER': 'MONT', 'SAINT LUKE': 'STLK', 'UAEH': 'UAEH', 'UNAM': 'UNAM', 'UNSA': 'UNSA', 'WESTHILL': 'WEST', 'TOMINAGA NAKAMOTO': 'TOMI', 'EXTRANJEROS': 'EXTRANJEROS', 'INTERCAMBIO': 'INTERCAMBIO', 'UNAM FES ZARAGOZA': 'UNAM', 'OTROS': 'OTR' };
 
 document.addEventListener('DOMContentLoaded', async () => {
   if (navigator.platform.includes('Mac')) document.body.classList.add('platform-darwin');
@@ -58,7 +58,21 @@ async function loginApp() {
   else document.getElementById('auth-error').textContent = "Contraseña incorrecta";
 }
 
-async function arrancarSistema() { await cargarConfig(); setupNav(); await cargarUniversidades(); await cargarAlumnos(); checkGradoSelect(); checkExamGradoSelect(); }
+async function arrancarSistema() {
+  await cargarConfig(); setupNav();
+  // Restaurar estado de checkboxes troncal/remedial desde localStorage
+  const tr = localStorage.getItem('he_troncal');
+  const rem = localStorage.getItem('he_remedial');
+  if (tr !== null) document.getElementById('check-troncal').checked = tr === '1';
+  if (rem !== null) document.getElementById('check-remedial').checked = rem === '1';
+  await cargarUniversidades(); await cargarAlumnos(); checkGradoSelect(); checkExamGradoSelect();
+  actualizarBotonDeshacer();
+}
+
+function guardarCheckboxState() {
+  localStorage.setItem('he_troncal', document.getElementById('check-troncal').checked ? '1' : '0');
+  localStorage.setItem('he_remedial', document.getElementById('check-remedial').checked ? '1' : '0');
+}
 
 async function cargarConfig() {
   const r = await py('get_ciclo_actual'), ciclo = r.data?.ciclo || '—'; 
@@ -75,7 +89,10 @@ function goTo(section) {
   const link = document.querySelector(`[data-section="${section}"]`); if (link) link.parentElement.classList.add('active');
   const sec = document.getElementById(`sec-${section}`); if (sec) sec.classList.add('active');
   document.getElementById('topbar-title').textContent = link?.dataset.title || link?.textContent.trim() || '';
-  if (section === 'calificaciones') cargarTablaGlobal(); if (section === 'escuelas') renderEscuelas(); if (section === 'rotaciones') cargarAlertasDuplicados();
+  if (section === 'calificaciones') cargarTablaGlobal();
+  if (section === 'escuelas') renderEscuelas();
+  if (section === 'rotaciones') cargarAlertasDuplicados();
+  if (section === 'examenes') { actualizarIndicadorExamenesEvaluados(); cargarExamenesConDatos(); }
 }
 function switchTab(btn, panelId) {
   const group = btn.closest('.tab-group'); group.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active');
@@ -97,7 +114,7 @@ function checkWarningAlumnos() {
   document.getElementById('warning-alumnos').classList.remove('hidden');
 }
 function showProgress(pct) { document.getElementById('progress-bar').classList.add('show'); document.getElementById('progress-inner').style.width = pct + '%'; if (pct >= 100) setTimeout(() => document.getElementById('progress-bar').classList.remove('show'), 500); }
-function confirmDialog(title, msg, onOk, icon='⚠️') { document.getElementById('confirm-icon').textContent=icon; document.getElementById('confirm-title').textContent=title; document.getElementById('confirm-msg').textContent=msg; document.getElementById('confirm-overlay').classList.add('open'); document.getElementById('confirm-ok').onclick=()=>{closeModal('confirm-overlay'); onOk();}; }
+function confirmDialog(title, msg, onOk, icon='⚠️') { document.getElementById('confirm-icon').textContent=icon; document.getElementById('confirm-title').textContent=title; document.getElementById('confirm-msg').innerHTML=msg; document.getElementById('confirm-overlay').classList.add('open'); document.getElementById('confirm-ok').onclick=()=>{closeModal('confirm-overlay'); onOk();}; }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function gradePill(val) {
@@ -163,7 +180,7 @@ async function imprimirHojaIndividual(a, t) {
 }
 
 // ── EXPORTACIÓN ALUMNOS Y LISTAS ──
-async function openImportAlumnos() { const f = await window.api.openCSV('Seleccionar CSV alumnos'); if(!f) return; showProgress(40); const r = await py('importar_alumnos_csv',{contenido:f.content}); showProgress(100); if(r.ok){toast(`✓ ${r.data.ok?.length||0} alumnos importados`,'success');await cargarAlumnos();} else toast('Error: '+r.error,'error'); }
+async function openImportAlumnos() { const f = await window.api.openCSV('Seleccionar CSV alumnos'); if(!f) return; showProgress(40); const r = await py('importar_alumnos_csv',{contenido:f.content, ruta:f.path}); showProgress(100); if(r.ok){toast(`✓ ${r.data.ok?.length||0} alumnos importados`,'success');await cargarAlumnos(); actualizarBotonDeshacer();} else toast('Error: '+r.error,'error'); }
 async function descargarEjemploAlumnos() { confirmDialog('Aviso Importante', 'Usa los NOMBRES EXACTOS (ej. UNAM, IPN) en la columna UNIVERSIDAD.', async ()=>{ const r = await py('generar_csv_ejemplo_alumnos'); if(r.ok) await window.api.saveCSV(r.data.csv, 'ejemplo_alumnos.csv'); }, '💡'); }
 
 function openModalExportarLista() { openModal('modal-exportar-lista'); }
@@ -194,20 +211,37 @@ function mostrarEscuelas() { document.getElementById('schools-grid-view').style.
 // ── HOJAS Y ROTACIONES ──
 function checkGradoSelect() { const s=document.getElementById('rot-gen-grado'); if(s)s.addEventListener('change',()=>document.getElementById('rot-csv-guardia-wrap').style.display=s.value==='guardia'?'block':'none'); }
 function checkExamGradoSelect() { const s=document.getElementById('exam-gen-grado'); if(s)s.addEventListener('change',()=>document.getElementById('exam-csv-guardia-wrap').style.display=s.value==='guardia'?'block':'none'); }
-async function cargarCsvGuardia(t) { const f = await window.api.openCSV('Guardias CSV'); if(!f) return; if(t==='rot') {rotGuardiaCsv=f.content;document.getElementById('rot-guardia-filename').textContent=f.name;} else {examGuardiaCsv=f.content;document.getElementById('exam-guardia-filename').textContent=f.name;} }
+async function cargarCsvGuardia(t) {
+  const f = await window.api.openCSV('Guardias CSV / Excel');
+  if(!f) return;
+  if(t==='rot') {
+    rotGuardiaCsv = f.content;       // null para xlsx
+    rotGuardiaPath = f.path;          // siempre disponible
+    document.getElementById('rot-guardia-filename').textContent = f.name;
+  } else {
+    examGuardiaCsv = f.content;
+    examGuardiaPath = f.path;
+    document.getElementById('exam-guardia-filename').textContent = f.name;
+  }
+}
 async function descargarEjemploGuardias() { const r = await py('generar_csv_ejemplo_guardias'); if(r.ok) await window.api.saveCSV(r.data.csv, 'ejemplo_guardias.csv'); }
 
 async function generarHojasRotacion() {
   const g = document.getElementById('rot-gen-grado').value, d = document.getElementById('rot-out-dir').value, p = {output_dir:d||null};
-  if(g==='guardia'){if(!rotGuardiaCsv)return toast('Carga el CSV de guardia','warning');p.csv_guardias=rotGuardiaCsv;} else if(g) p.grado=g;
+  if(g==='guardia'){
+    if(!rotGuardiaCsv && !rotGuardiaPath) return toast('Carga el archivo de guardia (CSV o Excel)','warning');
+    if(rotGuardiaCsv) p.csv_guardias = rotGuardiaCsv;
+    else p.csv_guardias_ruta = rotGuardiaPath;  // xlsx: pasar ruta a Python
+  } else if(g) p.grado=g;
   showProgress(20); const r=await py('generar_hojas_rotacion',p); showProgress(100);
   if(r.ok){ const n=r.data?.generados??0; toast(n>0?`✓ ${n} hojas generadas`:'Sin hojas generadas — revisa los errores en la consola', n>0?'success':'warning', 6000); if(n>0&&r.data?.directorio) window.api.openFolder(r.data.directorio); } else toast('Error: '+r.error,'error');
 }
 async function importarCSVRotaciones() {
   const f = await window.api.openCSV('Seleccionar EVAL.csv (Rotaciones)'); if(!f) return;
-  showProgress(30); const r = await py('importar_rotaciones',{contenido:f.content, nombre_archivo:f.name}); showProgress(100);
+  showProgress(30); const r = await py('importar_rotaciones',{contenido:f.content, ruta:f.path, nombre_archivo:f.name}); showProgress(100);
   if(!r.ok) return toast('Error: '+r.error,'error'); const d = document.getElementById('rot-import-result'); d.innerHTML = `<div class="card mt-2"><p>✅ Insertados: <strong>${r.data.insertados||0}</strong> | ⏭ Ignorados: ${r.data.ignorados||0}</p></div>`;
   if(r.data.duplicados_alerta?.length) { toast(`⚠️ ${r.data.duplicados_alerta.length} duplicados. Revisa el panel.`, 'warning'); cargarAlertasDuplicados(); } else toast(`✓ Importado`,'success');
+  actualizarBotonDeshacer();
 }
 async function cargarAlertasDuplicados() {
   const r = await py('get_alertas_duplicados'), a = r.data?.alertas||[], p = document.getElementById('duplicados-panel');
@@ -227,18 +261,23 @@ function filtrarTablaRot(gr, ctx) {
 // ── PIZARRÓN DE EXÁMENES (PREVIEW LOTE) ──
 async function generarHojasExamen() {
   const g = document.getElementById('exam-gen-grado').value, d = document.getElementById('exam-out-dir').value, p = {output_dir:d||null};
-  if(g==='guardia'){if(!examGuardiaCsv)return toast('Carga CSV guardia','warning');p.csv_guardias=examGuardiaCsv;} else if(g) p.grado=g;
+  if(g==='guardia'){
+    if(!examGuardiaCsv && !examGuardiaPath) return toast('Carga el archivo de guardia (CSV o Excel)','warning');
+    if(examGuardiaCsv) p.csv_guardias = examGuardiaCsv;
+    else p.csv_guardias_ruta = examGuardiaPath;  // xlsx: pasar ruta a Python
+  } else if(g) p.grado=g;
   showProgress(20); const r=await py('generar_hojas_examen',p); showProgress(100);
   if(r.ok){ const n=r.data?.generados??0; toast(n>0?`✓ ${n} hojas generadas`:'Sin hojas generadas — revisa los errores en la consola', n>0?'success':'warning', 5000); if(n>0&&r.data?.directorio) window.api.openFolder(r.data.directorio); } else toast('Error: '+r.error,'error');
 }
 
 async function importarCSVExamenPreview() {
   const f = await window.api.openCSV('Seleccionar CSV Examen ZipGrade'); if(!f) return;
-  showProgress(30); const r = await py('importar_examenes_preview', { contenido: f.content }); showProgress(100);
+  showProgress(30); const r = await py('importar_examenes_preview', { contenido: f.content, ruta: f.path }); showProgress(100);
   if(!r.ok) return toast('Error: ' + r.error, 'error');
   examPreviewLote = r.data.registros || [];
   document.getElementById('card-upload-exam').style.display = 'none'; document.getElementById('card-preview-exam').style.display = 'block'; document.getElementById('preview-global-extra').value = 0;
   document.getElementById('card-preview-exam').dataset.hash = "preview_" + Date.now(); document.getElementById('card-preview-exam').dataset.filename = f.name;
+  document.getElementById('card-preview-exam').dataset.filepath = f.path;
   renderTablaPreviewExamenes();
 }
 
@@ -253,38 +292,144 @@ function aplicarExtraGlobalPreview() { const v = parseFloat(document.getElementB
 function actualizarExtraPreview(idx, val) { examPreviewLote[idx].extra = parseFloat(val) || 0; renderTablaPreviewExamenes(); }
 function cancelarPreview() { examPreviewLote = []; document.getElementById('card-preview-exam').style.display = 'none'; document.getElementById('card-upload-exam').style.display = 'block'; }
 
-async function confirmarYGuardarLote() {
-  const mat = document.getElementById('exam-import-materia').value, tip = document.getElementById('exam-import-tipo').value, fname = document.getElementById('card-preview-exam').dataset.filename, hash = document.getElementById('card-preview-exam').dataset.hash;
-  showProgress(30); const r = await py('guardar_examenes_lote', { registros: examPreviewLote, materia: mat, tipo_examen: tip, nombre_archivo: fname, hash_csv: hash }); showProgress(100);
+async function confirmarYGuardarLote(modo = 'nuevo') {
+  const mat = document.getElementById('exam-import-materia').value, tip = document.getElementById('exam-import-tipo').value, fname = document.getElementById('card-preview-exam').dataset.filename, hash = document.getElementById('card-preview-exam').dataset.hash, filepath = document.getElementById('card-preview-exam').dataset.filepath;
+
+  // Si es la primera llamada (modo='nuevo'), verificar si ya existen registros
+  if(modo === 'nuevo') {
+    showProgress(15);
+    const chk = await py('check_examenes_existentes', { materia: mat, tipo_examen: tip });
+    showProgress(30);
+    if(chk.ok && chk.data?.existentes) {
+      // Ya existen registros — mostrar modal de advertencia
+      abrirModalDuplicadoExamen(mat, tip, chk.data.count, chk.data.ciclo);
+      return;
+    }
+  }
+
+  showProgress(50);
+  const r = await py('guardar_examenes_lote', { registros: examPreviewLote, materia: mat, tipo_examen: tip, nombre_archivo: fname, hash_csv: hash, ruta: filepath, modo });
+  showProgress(100);
   if(r.ok) {
-    toast(`✓ ${r.data.insertados} exámenes guardados`, 'success');
+    const modoStr = modo==='reemplazar' ? ' (reemplazado)' : modo==='complementar' ? ' (complementado)' : '';
+    toast(`✓ ${r.data.insertados} exámenes guardados${modoStr}`, 'success');
     cancelarPreview();
     cargarTablaGlobal();
-    // Sincronizar filtros de Resultados con lo que se acaba de guardar
+    actualizarBotonDeshacer();
+    actualizarIndicadorExamenesEvaluados();
     document.getElementById('exam-res-materia').value = mat;
     document.getElementById('exam-res-tipo').value = tip;
-    // Ir automáticamente a la pestaña Resultados y cargar datos
     document.getElementById('btn-exam-resultados')?.click();
   } else toast('Error: ' + r.error, 'error');
 }
 
+// ── MODAL DE DUPLICADO DE EXAMEN ──
+function abrirModalDuplicadoExamen(mat, tip, count, ciclo) {
+  document.getElementById('dup-exam-info').innerHTML =
+    `Ya existen <strong>${count}</strong> registro(s) de <strong>${mat} — ${tip}</strong> para el ciclo <strong>${ciclo}</strong>.`;
+  document.getElementById('modal-dup-exam').classList.add('open');
+}
+
+function cerrarModalDuplicadoExamen() {
+  document.getElementById('modal-dup-exam').classList.remove('open');
+}
+
+function elegirModoDuplicadoExamen(modo) {
+  cerrarModalDuplicadoExamen();
+  if(modo === 'cancelar') { toast('Importación cancelada.', 'info', 2000); return; }
+  if(modo === 'complementar') { confirmarYGuardarLote('complementar'); return; }
+  if(modo === 'reemplazar') {
+    confirmDialog(
+      '⚠️ Reemplazar Todo',
+      'Se eliminarán <strong>todos</strong> los registros anteriores de este examen y se sustituirán por los nuevos importados.<br><br>Esta acción no se puede deshacer.',
+      () => confirmarYGuardarLote('reemplazar')
+    );
+  }
+}
+
 // ── MANUAL Y CAMPANA ──
 function abrirModalManual(ctx) {
-  document.getElementById('manual-contexto').value=ctx; document.getElementById('manual-alumno').innerHTML='<option value="">Selecciona...</option>'+allAlumnos.map(a=>`<option value="${a.mip_id}">${a.nombre_completo||a.nombres}</option>`).join(''); document.getElementById('manual-calificacion').value=''; document.getElementById('manual-materia').selectedIndex=0;
-  const t=document.getElementById('manual-tipo'); Array.from(t.options).forEach(o=>{if(ctx==='rotacion'){o.style.display=o.value==='rotacion'?'block':'none';if(o.value==='rotacion')t.value='rotacion';}else{o.style.display=o.value==='rotacion'?'none':'block';if(o.value==='parcial')t.value='parcial';}}); openModal('modal-manual');
+  document.getElementById('manual-contexto').value=ctx;
+  document.getElementById('manual-alumno').innerHTML='<option value="">Selecciona...</option>'+allAlumnos.map(a=>`<option value="${a.mip_id}">${a.nombre_completo||a.nombres}</option>`).join('');
+  document.getElementById('manual-calificacion').value='';
+
+  // Filtrar opciones de materia según contexto
+  const matSel = document.getElementById('manual-materia');
+  Array.from(matSel.options).forEach(o => {
+    if(ctx==='rotacion') {
+      // En rotación: ocultar Urg-Fam (clona) y Troncal (solo aplican en exámenes)
+      o.style.display = (o.value==='Urg-Fam' || o.value==='Troncal') ? 'none' : '';
+    } else {
+      o.style.display = '';  // mostrar todas en examen
+    }
+  });
+  matSel.selectedIndex = 0;
+  // Si el primer valor seleccionado es uno oculto, buscar el siguiente visible
+  for(let i=0; i<matSel.options.length; i++){
+    if(matSel.options[i].style.display!=='none'){ matSel.selectedIndex=i; break; }
+  }
+
+  // Filtrar tipos
+  const t=document.getElementById('manual-tipo');
+  Array.from(t.options).forEach(o=>{
+    if(ctx==='rotacion'){
+      o.style.display=o.value==='rotacion'?'':'none';
+      if(o.value==='rotacion') t.value='rotacion';
+    } else {
+      // En examen: ocultar rotacion y troncal (troncal ya es materia, no tipo)
+      o.style.display=(o.value==='rotacion'||o.value==='troncal')?'none':'';
+      if(o.value==='parcial') t.value='parcial';
+    }
+  });
+  openModal('modal-manual');
 }
 async function guardarRegistroManual() {
   const i=document.getElementById('manual-alumno').value, m=document.getElementById('manual-materia').value, t=document.getElementById('manual-tipo').value, c=document.getElementById('manual-calificacion').value;
+  const ctx=document.getElementById('manual-contexto').value;
   if(!i||!m||!t||!c) return toast('Completa los campos','warning'); showProgress(30); const r=await py('registrar_manual',{mip_id:i,materia:m,tipo_registro:t,calificacion:c}); showProgress(100);
-  if(r.ok){toast('✓ Guardado','success');closeModal('modal-manual');cargarTablaGlobal();} else toast('Error','error');
+  if(r.ok){
+    toast('✓ Guardado','success');
+    closeModal('modal-manual');
+    cargarTablaGlobal();
+    // Si estamos en contexto de rotación, refrescar también la tabla de calificaciones de rotaciones
+    if(ctx==='rotacion') filtrarTablaRot(rotGrado, null);
+  } else toast('Error','error');
 }
 function abrirModalCampana(ctx) {
   if (ctx === 'rotacion') { toast('La campana no está disponible para Rotaciones.', 'warning'); return; }
-  document.getElementById('campana-contexto').value=ctx; const t=document.getElementById('campana-tipo'); Array.from(t.options).forEach(o=>{o.style.display=o.value==='rotacion'?'none':'block';if(o.value==='parcial')t.value='parcial';}); openModal('modal-campana');
+  document.getElementById('campana-contexto').value=ctx;
+  // Si hay una vista previa activa, la campana trabaja sobre ella (no sobre la BD)
+  const enPreview = document.getElementById('card-preview-exam').style.display !== 'none' && examPreviewLote.length > 0;
+  document.getElementById('campana-modo-info').style.display = enPreview ? 'block' : 'none';
+  const t=document.getElementById('campana-tipo'); Array.from(t.options).forEach(o=>{o.style.display=o.value==='rotacion'?'none':'block';if(o.value==='parcial')t.value='parcial';}); openModal('modal-campana');
 }
 async function ejecutarCampana() {
-  const m=document.getElementById('campana-materia').value, t=document.getElementById('campana-tipo').value, b=document.getElementById('campana-base').value; if(!b||b<=0)return toast('Base inválida','warning');
-  confirmDialog('Aplicar Campana',`¿Elevar a ${b}? Modificará la BD permanente.`, async ()=>{ showProgress(30); const r=await py('aplicar_campana',{materia:m,tipo_registro:t,cal_base:b}); showProgress(100); if(r.ok){toast('✓ Campana lista','success');closeModal('modal-campana');cargarTablaGlobal();} else toast(r.error,'error'); });
+  const b = parseFloat(document.getElementById('campana-base').value);
+  if(!b || b <= 0) return toast('Base inválida','warning');
+
+  const enPreview = document.getElementById('card-preview-exam').style.display !== 'none' && examPreviewLote.length > 0;
+
+  if(enPreview) {
+    // Modo preview: modificar el array JS sin tocar la BD
+    const maxBase = Math.max(...examPreviewLote.map(r => parseFloat(r.base) + parseFloat(r.extra || 0)));
+    if(maxBase <= 0) return toast('No hay calificaciones en la vista previa','warning');
+    const factor = b / maxBase;
+    examPreviewLote = examPreviewLote.map(r => {
+      const totalActual = parseFloat(r.base) + parseFloat(r.extra || 0);
+      const nuevoTotal = Math.min(b, totalActual * factor);
+      return { ...r, base: nuevoTotal, extra: 0 };
+    });
+    renderTablaPreviewExamenes();
+    closeModal('modal-campana');
+    toast(`✓ Campana aplicada en vista previa (máx → ${b}). Guarda con "Confirmar y Guardar Todo".`, 'success', 5000);
+  } else {
+    // Modo directo (fuera de preview): modificar la BD con contraseña
+    const mat=document.getElementById('campana-materia').value, t=document.getElementById('campana-tipo').value;
+    confirmDialog('Aplicar Campana a BD',`¿Elevar ${mat} ${t} a ${b}? Esto modifica calificaciones guardadas.`, async ()=>{
+      showProgress(30); const r=await py('aplicar_campana',{materia:mat,tipo_registro:t,cal_base:b}); showProgress(100);
+      if(r.ok){toast('✓ Campana aplicada','success');closeModal('modal-campana');cargarTablaGlobal();} else toast(r.error,'error');
+    });
+  }
 }
 
 // ── RESULTADOS HISTÓRICOS (EXÁMENES) ──
@@ -325,11 +470,54 @@ function onMateriaCambio() {
   const mat = document.getElementById('exam-import-materia').value;
   const tipoSel = document.getElementById('exam-import-tipo');
   if (mat === 'Troncal') {
-    tipoSel.value = 'parcial'; // reset to safe default
+    tipoSel.value = 'parcial';
     tipoSel.disabled = true;
   } else {
     tipoSel.disabled = false;
   }
+  actualizarIndicadorExamenesEvaluados();
+}
+
+async function actualizarIndicadorExamenesEvaluados() {
+  const mat = document.getElementById('exam-import-materia')?.value;
+  const tip = document.getElementById('exam-import-tipo')?.value;
+  const indicador = document.getElementById('exam-evaluado-indicator');
+  if(!indicador || !mat || !tip) return;
+  // Troncal no tiene registros propios (es compuesto); ocultar indicador
+  if(mat === 'Troncal') { indicador.style.display = 'none'; return; }
+  // Consulta directa: sin expansión de materia (solo la materia seleccionada literalmente)
+  const chk = await py('check_examenes_existentes', { materia: mat, tipo_examen: tip });
+  if(chk.ok && chk.data?.existentes) {
+    indicador.textContent = `✅ Ya evaluado — ${chk.data.count} registros en ciclo ${chk.data.ciclo}`;
+    indicador.style.color = 'var(--verde)';
+    indicador.style.display = 'block';
+  } else {
+    indicador.style.display = 'none';
+  }
+}
+
+// Colores en lista de resultados de exámenes (indica exámenes ya evaluados)
+let _examenesConDatos = {};
+async function cargarExamenesConDatos() {
+  const materias = ['Cirugía','Medicina Interna','Pediatría','GyO','Urgencias','Familiar'];
+  const tipos = ['parcial','final','remedial'];
+  _examenesConDatos = {};
+  for(const mat of materias) {
+    for(const tip of tipos) {
+      const chk = await py('check_examenes_existentes', { materia: mat, tipo_examen: tip });
+      if(chk.ok && chk.data?.existentes) {
+        _examenesConDatos[`${mat}|${tip}`] = true;
+      }
+    }
+  }
+  // Colorear options en los selectores de resultados
+  const resMat = document.getElementById('exam-res-materia');
+  const resTip = document.getElementById('exam-res-tipo');
+  if(resMat) Array.from(resMat.options).forEach(o => {
+    const tieneAlgo = tipos.some(t => _examenesConDatos[`${o.value}|${t}`]);
+    o.style.color = tieneAlgo ? 'var(--verde)' : '';
+    o.style.fontWeight = tieneAlgo ? 'bold' : '';
+  });
 }
 
 async function exportarResultadosExamen() { abrirModalExportResultados(); }
@@ -353,7 +541,9 @@ async function confirmarExportResultados() {
 function filtrarCalGlobal(gr, ctx) { 
   calGrado=gr; 
   if(ctx){ctx.closest('.tab-group').querySelectorAll('button').forEach(b=>b.classList.remove('active')); ctx.classList.add('active');} 
-  cargarTablaGlobal(); 
+  cargarTablaGlobal();
+  // Si estadísticas está visible, recargar también
+  if(document.getElementById('tab-cal-estadisticas')?.style.display === 'block') cargarGraficosExamen();
 }
 
 async function cargarTablaGlobal() {
@@ -411,7 +601,52 @@ async function exportarVistaGlobalCsv() {
 
 async function setRubricaGlobal(id, rub) { if(!rub)return; await py('set_rubrica_entregas_global', {mip_id:id, rubrica:rub}); cargarTablaGlobal(); }
 async function recalcularTodo() { showProgress(20); const r=await py('recalcular_todo'); showProgress(100); if(r.ok){toast('✓ Recalculado','success');cargarTablaGlobal();} else toast('Error','error'); }
-async function exportarExcel(t) { showProgress(30); const r=await py('exportar_excel',{tipo:t,grado:calGrado||null, usar_troncal: document.getElementById('check-troncal').checked}); showProgress(100); if(r.ok){toast('✓ Guardado','success');window.api.openFile(r.data.path);}else toast('Error','error'); }
+async function exportarExcel(t) {
+  const tr = document.getElementById('check-troncal').checked;
+  const rem = document.getElementById('check-remedial').checked;
+  showProgress(30);
+  const r = await py('exportar_excel', {tipo:t, grado:calGrado||null, usar_troncal:tr, usar_remedial:rem});
+  showProgress(100);
+  if(r.ok){ toast('✓ Guardado','success'); window.api.openFile(r.data.path); } else toast('Error','error');
+}
+
+// ── MODALES DE EXPORTACIÓN CON SELECCIÓN DE GRADO ──
+function abrirModalExportRotaciones() { openModal('modal-export-rotaciones'); }
+async function confirmarExportRotaciones() {
+  const grado = document.getElementById('export-rot-grado').value;
+  closeModal('modal-export-rotaciones');
+  showProgress(30);
+  const r = await py('exportar_excel_rotaciones', { grado: grado || null });
+  showProgress(100);
+  if(r.ok || r.data?.path) { toast('✓ Excel de rotaciones generado', 'success'); window.api.openFile(r.data?.path || r.path); }
+  else toast('Error: ' + (r.error || ''), 'error');
+}
+
+function abrirModalExportGlobal() { openModal('modal-export-global'); }
+async function confirmarExportGlobal() {
+  const grado = document.getElementById('export-global-grado').value;
+  const tr = document.getElementById('check-troncal').checked;
+  const rem = document.getElementById('check-remedial').checked;
+  closeModal('modal-export-global');
+  showProgress(30);
+  const r = await py('exportar_excel', { grado: grado || null, usar_troncal: tr, usar_remedial: rem });
+  showProgress(100);
+  if(r.ok || r.data?.path) { toast('✓ Excel global generado', 'success'); window.api.openFile(r.data?.path || r.path); }
+  else toast('Error: ' + (r.error || ''), 'error');
+}
+
+function abrirModalExportMega() { openModal('modal-export-mega'); }
+async function confirmarExportMega() {
+  const grado = document.getElementById('export-mega-grado').value;
+  const tr = document.getElementById('check-troncal').checked;
+  const rem = document.getElementById('check-remedial').checked;
+  closeModal('modal-export-mega');
+  showProgress(30);
+  const r = await py('exportar_excel_mega_examenes', { grado: grado || null, usar_troncal: tr, usar_remedial: rem });
+  showProgress(100);
+  if(r.ok || r.data?.path) { toast('✓ Excel mega-tabla generado', 'success'); window.api.openFile(r.data?.path || r.path); }
+  else toast('Error: ' + (r.error || ''), 'error');
+}
 
 // ── EDICIÓN DE CALIFICACIONES INDIVIDUALES ──
 let _editarCalRegistros = [];   // todos los registros crudos del alumno
@@ -477,7 +712,11 @@ async function guardarEdicionCal() {
   if (!pwd) return toast('Ingresa la contraseña para confirmar', 'warning');
 
   const auth = await py('auth_login', { pwd });
-  if (!auth.data?.valid) return toast('Contraseña incorrecta', 'error');
+  if (!auth.data?.valid) {
+    document.getElementById('editar-cal-pwd-feedback').textContent = '❌ Contraseña incorrecta';
+    document.getElementById('editar-cal-pwd-feedback').className = 'pwd-feedback invalid';
+    return toast('Contraseña incorrecta', 'error');
+  }
 
   const materia   = document.getElementById('editar-cal-materia').value;
   const tipo      = document.getElementById('editar-cal-tipo').value;
@@ -552,18 +791,69 @@ async function guardarEdicionCal() {
 }
 
 
+// Feedback de contraseña en tiempo real (debounce 600ms)
+let _pwdTimer = null;
+async function validarPwdEdicion() {
+  const fb = document.getElementById('editar-cal-pwd-feedback');
+  const val = document.getElementById('editar-cal-pwd').value;
+  clearTimeout(_pwdTimer);
+  if (!val) { fb.textContent = ''; fb.className = 'pwd-feedback'; return; }
+  fb.textContent = '⏳ Verificando…'; fb.className = 'pwd-feedback checking';
+  _pwdTimer = setTimeout(async () => {
+    const r = await py('auth_login', { pwd: val });
+    if (r.data?.valid) { fb.textContent = '✅ Contraseña correcta'; fb.className = 'pwd-feedback valid'; }
+    else { fb.textContent = '❌ Contraseña incorrecta'; fb.className = 'pwd-feedback invalid'; }
+  }, 600);
+}
+
 async function cargarGraficosExamen() {
-  const mat = document.getElementById('cal-exam-materia').value, tip = document.getElementById('cal-exam-tipo').value;
-  const r = await py('get_tabla_examenes', { materia:mat, tipo_examen:tip }); const tb = r.data?.tabla || [];
+  const mat = document.getElementById('cal-exam-materia').value;
+  const tip = document.getElementById('cal-exam-tipo').value;
+  // Filtrar por grado activo (calGrado)
+  const gradoFiltro = calGrado || null;
+
+  // Cargar datos de gráficos
+  const r = await py('get_tabla_examenes', { materia: mat || 'Cirugía', tipo_examen: tip, grado: gradoFiltro });
+  const tb = r.data?.tabla || [];
   if(chartUniv) chartUniv.destroy(); if(chartDist) chartDist.destroy();
-  const uM = {}; tb.forEach(r=>{ const u=r.universidad||'OTROS'; if(!uM[u])uM[u]=[]; if(r.mip1_score!==null)uM[u].push(parseFloat(r.mip1_score)); if(r.mip2_score!==null)uM[u].push(parseFloat(r.mip2_score)); });
+
+  const uM = {};
+  tb.forEach(r=>{
+    const u=r.universidad||'OTROS';
+    if(!uM[u])uM[u]=[];
+    if(r.mip1_score!==null)uM[u].push(parseFloat(r.mip1_score));
+    if(r.mip2_score!==null)uM[u].push(parseFloat(r.mip2_score));
+  });
   const l1=Object.keys(uM), d1=l1.map(u=>uM[u].reduce((a,b)=>a+b,0)/uM[u].length||0);
-  chartUniv = new Chart(document.getElementById('chart-por-universidad').getContext('2d'), { type:'bar', data:{labels:l1,datasets:[{label:'Promedio',data:d1,backgroundColor:'#2C4F7C',borderRadius:6}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:`${mat} ${tip}`,color:getComputedStyle(document.documentElement).getPropertyValue('--text')}},scales:{y:{min:0,max:100}}} });
-  const b={'0-49':0,'50-59':0,'60-69':0,'70-79':0,'80-89':0,'90-100':0}; tb.forEach(r=>{ [r.mip1_score, r.mip2_score].forEach(v=>{const val=parseFloat(v); if(isNaN(val))return; if(val<50)b['0-49']++;else if(val<60)b['50-59']++;else if(val<70)b['60-69']++;else if(val<80)b['70-79']++;else if(val<90)b['80-89']++;else b['90-100']++;}) });
-  chartDist = new Chart(document.getElementById('chart-distribucion').getContext('2d'), { type:'doughnut', data:{labels:Object.keys(b),datasets:[{data:Object.values(b),backgroundColor:['#e74c3c','#e67e22','#f1c40f','#27ae60','#2C4F7C','#4A7C59']}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right'}}} });
-  const top = await py('get_top_3_examenes');
+  chartUniv = new Chart(document.getElementById('chart-por-universidad').getContext('2d'), {
+    type:'bar',
+    data:{labels:l1,datasets:[{label:'Promedio',data:d1,backgroundColor:'#2C4F7C',borderRadius:6}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:`${mat||'General'} ${tip}`,color:getComputedStyle(document.documentElement).getPropertyValue('--text')}},scales:{y:{min:0,max:100}}}
+  });
+
+  const b={'0-49':0,'50-59':0,'60-69':0,'70-79':0,'80-89':0,'90-100':0};
+  tb.forEach(r=>{ [r.mip1_score, r.mip2_score].forEach(v=>{
+    const val=parseFloat(v); if(isNaN(val))return;
+    if(val<50)b['0-49']++;else if(val<60)b['50-59']++;else if(val<70)b['60-69']++;else if(val<80)b['70-79']++;else if(val<90)b['80-89']++;else b['90-100']++;
+  }) });
+  chartDist = new Chart(document.getElementById('chart-distribucion').getContext('2d'), {
+    type:'doughnut',
+    data:{labels:Object.keys(b),datasets:[{data:Object.values(b),backgroundColor:['#e74c3c','#e67e22','#f1c40f','#27ae60','#2C4F7C','#4A7C59']}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right'}}}
+  });
+
+  // TOP — filtrado por materia (si hay selección) y por grado
+  const top = await py('get_top_3_examenes', {
+    materia: mat || null,
+    tipo_examen: mat ? tip : null,
+    grado: gradoFiltro
+  });
+  const topTitle = mat ? `${mat} — ${tip}` : 'General (todos los exámenes)';
   document.getElementById('top-mip2-list').innerHTML = (top.data?.mip2||[]).map((x,i)=>`<div style="display:flex; justify-content:space-between; margin-bottom:8px; border-bottom:1px solid var(--border); padding-bottom:4px;"><span>${i===0?'🥇':i===1?'🥈':'🥉'} <b>${x.nombre}</b> <br><small class="text-muted">${x.escuela}</small></span><span style="font-weight:bold; color:var(--verde)">${Math.floor(parseFloat(x.prom) + 0.5)}</span></div>`).join('')||'<span class="text-muted">No hay datos</span>';
   document.getElementById('top-mip1-list').innerHTML = (top.data?.mip1||[]).map((x,i)=>`<div style="display:flex; justify-content:space-between; margin-bottom:8px; border-bottom:1px solid var(--border); padding-bottom:4px;"><span>${i===0?'🥇':i===1?'🥈':'🥉'} <b>${x.nombre}</b> <br><small class="text-muted">${x.escuela}</small></span><span style="font-weight:bold; color:var(--verde)">${Math.floor(parseFloat(x.prom) + 0.5)}</span></div>`).join('')||'<span class="text-muted">No hay datos</span>';
+  // Actualizar título del TOP según la materia
+  const topH = document.querySelector('#tab-cal-estadisticas h3');
+  if (topH) topH.textContent = `🏆 TOP 3 — ${topTitle}${gradoFiltro ? ' · ' + gradoFiltro : ''}`;
 }
 
 // ── HERENCIA DEL SISTEMA (DB) ──
@@ -621,4 +911,78 @@ async function ejecutarImportarAntiguo() {
     resDiv.innerHTML = `<div class="card" style="padding:12px; border-color:var(--danger);"><p style="color:var(--danger);"><strong>❌ Error</strong></p><p class="text-sm">${r.error || 'Error desconocido'}</p></div>`;
     toast('Error en importación: ' + (r.error || ''), 'error');
   }
+}
+
+async function actualizarBotonDeshacer() {
+  const btn = document.getElementById('btn-undo-import');
+  if (!btn) return;
+  const r = await py('get_ultima_importacion');
+  if (r.ok && r.data?.ultima) {
+    const u = r.data.ultima;
+    let tipoStr = 'Importación';
+    if (u.tipo === 'rotaciones') tipoStr = 'Rotaciones';
+    else if (u.tipo === 'examenes') tipoStr = 'Exámenes';
+    else if (u.tipo === 'alumnos_csv' || u.tipo === 'alumnos') tipoStr = 'Alumnos';
+    
+    btn.textContent = `↩ Deshacer: ${tipoStr}`;
+    btn.title = u.archivo_nombre;  // nombre completo en tooltip
+    btn.style.display = 'inline-flex';
+    btn.dataset.id = u.id;
+    btn.dataset.tipo = u.tipo;
+    btn.dataset.filename = u.archivo_nombre;
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+function confirmarDeshacerImportacion() {
+  const btn = document.getElementById('btn-undo-import');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const tipo = btn.dataset.tipo;
+  const filename = btn.dataset.filename;
+  if (!id) return;
+
+  let details = "";
+  if (tipo === 'rotaciones') {
+    details = "Se eliminarán todas las calificaciones de rotaciones asociadas a este archivo y se restaurarán los estados previos.";
+  } else if (tipo === 'examenes') {
+    details = "Se eliminarán todos los exámenes asociados a este lote de importación.";
+  } else {
+    details = "Se eliminarán los alumnos creados durante esta importación (siempre y cuando no tengan calificaciones registradas).";
+  }
+
+  confirmDialog(
+    '¿Deshacer Última Importación?',
+    `¿Estás seguro de que deseas deshacer la importación del archivo <strong>"${filename}"</strong>?<br><br><span style="color:var(--danger)">${details}</span>`,
+    async () => {
+      showProgress(30);
+      const r = await py('deshacer_ultima_importacion');
+      showProgress(100);
+      if (r.ok) {
+        toast('✓ Importación deshecha correctamente', 'success');
+        actualizarBotonDeshacer();
+        
+        // Refresh whichever section is currently active
+        const activeSection = document.querySelector('.section.active')?.id;
+        if (activeSection === 'sec-alumnos') {
+          await cargarAlumnos();
+        } else if (activeSection === 'sec-rotaciones') {
+          filtrarTablaRot(rotGrado, document.querySelector('#sec-rotaciones .tab-group button.active'));
+          cargarAlertasDuplicados();
+        } else if (activeSection === 'sec-examenes') {
+          // If we have filters/load function for exams, call it
+          if (typeof cargarTablaExamenes === 'function') cargarTablaExamenes();
+        } else if (activeSection === 'sec-calificaciones') {
+          cargarTablaGlobal();
+        }
+        
+        // Always refresh main global calculations/tables just in case
+        cargarTablaGlobal();
+      } else {
+        toast('Error al deshacer: ' + (r.error || 'Intenta de nuevo'), 'error');
+      }
+    },
+    '↩'
+  );
 }

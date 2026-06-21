@@ -719,10 +719,25 @@ tbody td {
 .drop-zone .drop-icon { font-size: 32px; margin-bottom: 8px; }
 .drop-zone p { font-size: 13px; }
 
-/* Confirm dialog overlay */
-#confirm-overlay { align-items: center; justify-content: center; }
+/* Confirm dialog overlay — z-index elevado para aparecer ENCIMA de cualquier modal */
+#confirm-overlay { align-items: center; justify-content: center; z-index: 10001 !important; }
 .confirm-modal { max-width: 420px; }
 .confirm-icon { font-size: 40px; text-align: center; margin-bottom: 10px; }
+
+/* Indicador de validación de contraseña en tiempo real */
+.pwd-feedback {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 6px;
+  height: 18px;
+  transition: all .2s ease;
+}
+.pwd-feedback.valid   { color: var(--verde-light); }
+.pwd-feedback.invalid { color: var(--danger); }
+.pwd-feedback.checking { color: var(--text-muted); }
 
 /* ═══════════════════ CORRECCIONES ═══════════════════ */
 /* Select de la Rúbrica */

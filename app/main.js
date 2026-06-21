@@ -199,28 +199,21 @@ ipcMain.handle('py:call', async (_evt, action, payload) => {
 ipcMain.handle('dialog:openCSV', async (_evt, title = 'Seleccionar CSV') => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title,
-    filters: [{ name: 'CSV / Excel', extensions: ['csv', 'xlsx'] }],
+    filters: [{ name: 'CSV / Excel', extensions: ['csv', 'xlsx', 'xls'] }],
     properties: ['openFile'],
   });
   if (result.canceled || !result.filePaths.length) return null;
   const filePath = result.filePaths[0];
   const ext = path.extname(filePath).toLowerCase();
 
-  if (ext === '.xlsx') {
-    // Convertir Excel a CSV usando la librería xlsx
+  let content = null;
+  if (ext === '.csv') {
     try {
-      const XLSX = require('xlsx');
-      const wb = XLSX.readFile(filePath);
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const content = XLSX.utils.sheet_to_csv(ws);
-      return { path: filePath, name: path.basename(filePath), content };
+      content = fs.readFileSync(filePath, 'utf-8');
     } catch (e) {
-      console.error('[XLSX] Error al convertir:', e.message);
-      return null;
+      console.error('[CSV] Error al leer:', e.message);
     }
   }
-
-  const content = fs.readFileSync(filePath, 'utf-8');
   return { path: filePath, name: path.basename(filePath), content };
 });
 

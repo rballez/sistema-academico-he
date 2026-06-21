@@ -62,7 +62,7 @@ def handle(action: str, payload: dict) -> dict:
     elif action == 'listar_alumnos': return {'alumnos': ga.listar_alumnos(grado=payload.get('grado'), universidad_id=payload.get('universidad_id'), solo_activos=payload.get('solo_activos', True))}
     elif action == 'crear_alumno': return {'alumno': ga.crear_alumno(mip_id=payload.get('mip_id', ''), ap_paterno=payload['ap_paterno'], ap_materno=payload.get('ap_materno', ''), nombres=payload['nombres'], universidad_id=payload['universidad_id'], grado=payload.get('grado', 'MIP 1'), ciclo=payload.get('ciclo'))}
     elif action == 'actualizar_alumno': return ga.actualizar_alumno(mip_id_old=payload['mip_id_old'], mip_id_new=payload['mip_id_new'], ap_paterno=payload['ap_paterno'], ap_materno=payload.get('ap_materno', ''), nombres=payload['nombres'], universidad_id=payload['universidad_id'], grado=payload.get('grado', 'MIP 1'), ciclo=payload['ciclo'])
-    elif action == 'importar_alumnos_csv': return ga.importar_alumnos_csv(payload['contenido'])
+    elif action == 'importar_alumnos_csv': return ga.importar_alumnos_csv(ruta_archivo=payload.get('ruta'), contenido_csv=payload.get('contenido'))
     elif action == 'eliminar_alumno': return {'eliminado': ga.eliminar_alumno(payload['mip_id'])}
     elif action == 'egresar_alumno_individual': return ga.egresar_alumno_individual(payload['mip_id'])
     elif action == 'listar_egresados': return {'egresados': ga.listar_egresados(payload.get('ciclo_egreso'))}
@@ -72,21 +72,31 @@ def handle(action: str, payload: dict) -> dict:
     elif action == 'generar_csv_ejemplo_guardias': return {'csv': ga.generar_csv_ejemplo_guardias()}
 
     # ── IMPORTACIÓN Y PREVISUALIZACIÓN ──
-    elif action == 'importar_rotaciones': result = iz.importar_rotaciones(contenido_csv=payload['contenido'], nombre_archivo=payload.get('nombre_archivo', 'rotaciones.csv')); cc.recalcular_todo(); return result
-    elif action == 'importar_examenes_preview': return iz.importar_examenes_preview(payload['contenido'])
-    elif action == 'guardar_examenes_lote': result = iz.guardar_examenes_lote(registros=payload['registros'], materia=payload['materia'], tipo_examen=payload['tipo_examen']); cc.recalcular_todo(); return result
+    elif action == 'importar_rotaciones': result = iz.importar_rotaciones(ruta_archivo=payload.get('ruta'), contenido_csv=payload.get('contenido'), nombre_archivo=payload.get('nombre_archivo', 'rotaciones.csv')); cc.recalcular_todo(); return result
+    elif action == 'importar_examenes_preview': return iz.importar_examenes_preview(ruta_archivo=payload.get('ruta'), contenido_csv=payload.get('contenido'))
+    elif action == 'check_examenes_existentes': return iz.check_examenes_existentes(materia=payload['materia'], tipo_examen=payload['tipo_examen'], ciclo=payload.get('ciclo'))
+    elif action == 'guardar_examenes_lote': result = iz.guardar_examenes_lote(registros=payload['registros'], materia=payload['materia'], tipo_examen=payload['tipo_examen'], nombre_archivo=payload.get('nombre_archivo', 'examenes.csv'), hash_csv=payload.get('hash_csv', ''), ruta=payload.get('ruta'), modo=payload.get('modo', 'nuevo')); cc.recalcular_todo(); return result
     elif action == 'registrar_manual': result = rm.registrar_calificacion_manual(mip_id=payload['mip_id'], materia=payload['materia'], tipo_registro=payload['tipo_registro'], calificacion=float(payload['calificacion']), ciclo=payload.get('ciclo')); cc.recalcular_todo(); return result
     elif action == 'aplicar_campana': result = rm.aplicar_campana(materia=payload['materia'], tipo_registro=payload['tipo_registro'], cal_base=float(payload['cal_base']), ciclo=payload.get('ciclo')); cc.recalcular_todo(); return result
     elif action == 'get_alertas_duplicados': return {'alertas': iz.get_alertas_duplicados_pendientes()}
     elif action == 'resolver_duplicado': result = iz.resolver_duplicado(alerta_id=payload['alerta_id'], resolucion=payload['resolucion'], materia_destino=payload.get('materia_destino')); cc.recalcular_todo(); return result
     elif action == 'get_historial_importaciones': return {'historial': iz.get_historial_importaciones()}
+    elif action == 'get_ultima_importacion':
+        hist = iz.get_historial_importaciones()
+        return {'ultima': hist[0] if hist else None}
+    elif action == 'deshacer_ultima_importacion':
+        hist = iz.get_historial_importaciones()
+        if not hist: return {'ok': False, 'error': 'No hay ninguna importación en el historial para deshacer.'}
+        res = iz.deshacer_importacion(hist[0]['id'])
+        if res.get('ok'): cc.recalcular_todo()
+        return res
 
     # ── CALIFICACIONES Y TABLAS ──
     elif action == 'recalcular_todo': return cc.recalcular_todo(payload.get('ciclo'), payload.get('usar_troncal', True), payload.get('usar_remedial', True))
     elif action == 'get_tabla_global': return {'tabla': cc.get_tabla_global(grado=payload.get('grado'), ciclo=payload.get('ciclo'), usar_troncal=payload.get('usar_troncal', True), usar_remedial=payload.get('usar_remedial', True))}
     elif action == 'get_vista_global_examenes': return {'tabla': cc.get_vista_global_examenes(ciclo=payload.get('ciclo'), usar_troncal=payload.get('usar_troncal', True), usar_remedial=payload.get('usar_remedial', True))}
     elif action == 'get_tabla_examenes': return {'tabla': cc.get_tabla_examenes(materia=payload['materia'], tipo_examen=payload['tipo_examen'], grado=payload.get('grado'), ciclo=payload.get('ciclo'))}
-    elif action == 'get_top_3_examenes': return cc.get_top_3_examenes(ciclo=payload.get('ciclo'))
+    elif action == 'get_top_3_examenes': return cc.get_top_3_examenes(ciclo=payload.get('ciclo'), materia=payload.get('materia'), tipo_examen=payload.get('tipo_examen'), grado=payload.get('grado'))
     elif action == 'set_rubrica_entregas_global': return cc.set_rubrica_entregas_global(mip_id=payload['mip_id'], rubrica=payload['rubrica'], ciclo=payload.get('ciclo'))
 
     # ── HERENCIA DEL SISTEMA (DB) ──
@@ -149,20 +159,27 @@ def handle(action: str, payload: dict) -> dict:
 
     elif action == 'generar_hojas_rotacion':
         from generar_hojas_wrapper import generar_rotacion_desde_db
-        result = generar_rotacion_desde_db(grado=payload.get('grado'), desde_csv=payload.get('csv_guardias'), out_dir=payload.get('output_dir'))
+        result = generar_rotacion_desde_db(grado=payload.get('grado'), desde_csv=payload.get('csv_guardias'), desde_csv_ruta=payload.get('csv_guardias_ruta'), out_dir=payload.get('output_dir'))
         if not result.get('ok', True):
             raise ValueError(result.get('error', 'Error al generar hojas de rotación'))
         return result
     elif action == 'generar_hojas_examen':
         from generar_hojas_wrapper import generar_examen_desde_db
-        result = generar_examen_desde_db(grado=payload.get('grado'), desde_csv=payload.get('csv_guardias'), out_dir=payload.get('output_dir'))
+        result = generar_examen_desde_db(grado=payload.get('grado'), desde_csv=payload.get('csv_guardias'), desde_csv_ruta=payload.get('csv_guardias_ruta'), out_dir=payload.get('output_dir'))
         if not result.get('ok', True):
             raise ValueError(result.get('error', 'Error al generar hojas de examen'))
         return result
     elif action == 'exportar_excel':
-        # La tabla Global normal
         from generar_reportes import exportar_excel_global
-        return {'path': exportar_excel_global(grado=payload.get('grado'))}
+        return {'path': exportar_excel_global(grado=payload.get('grado'), usar_troncal=payload.get('usar_troncal', True), usar_remedial=payload.get('usar_remedial', True))}
+
+    elif action == 'exportar_excel_rotaciones':
+        from generar_reportes import exportar_excel_rotaciones
+        return {'path': exportar_excel_rotaciones(grado=payload.get('grado'))}
+
+    elif action == 'exportar_excel_mega_examenes':
+        from generar_reportes import exportar_excel_mega_examenes
+        return {'path': exportar_excel_mega_examenes(grado=payload.get('grado'), usar_troncal=payload.get('usar_troncal', True), usar_remedial=payload.get('usar_remedial', True))}
 
     # ── EDICIÓN MANUAL DE CALIFICACIONES ──
     elif action == 'editar_calificacion':

@@ -108,7 +108,7 @@ def init_db():
     # a los valores oficiales usando UPDATE OR IGNORE (seguro en cualquier BD).
     try:
         ccc_correctos = [
-            ('LSC', '050'), ('LSV', '051'), ('ANS', '020'), ('ANN', '021'),
+            ('LSC', '050'), ('LSV', '051'), ('BUA', '020'), ('ANN', '021'),
             ('IPN', '210'), ('UNA', '290'), ('UNS', '740'), ('MON', '360'),
             ('WST', '540'), ('SLK', '910'), ('TOM', '430'), ('UAH', '760'),
             ('OTR', '650'), ('EXT', '940'), ('INT', '652'),
@@ -119,6 +119,24 @@ def init_db():
     except Exception as e:
         import sys
         print(f"[DB] Advertencia en migración CCC: {e}", file=sys.stderr)
+
+    # ── MIGRACIÓN: eliminar ANS duplicado y renombrar ANN → "Anáhuac" ──
+    # BUA ya fue insertado por el schema (INSERT OR IGNORE). Si ANS aún existe
+    # (BD antigua), redirigir sus alumnos/egresados a BUA y eliminarlo.
+    try:
+        import sys
+        bua = conn.execute("SELECT id FROM universidades WHERE codigo='BUA'").fetchone()
+        ans = conn.execute("SELECT id FROM universidades WHERE codigo='ANS'").fetchone()
+        if bua and ans:
+            conn.execute("UPDATE alumnos    SET universidad_id=? WHERE universidad_id=?", (bua['id'], ans['id']))
+            conn.execute("UPDATE egresados  SET universidad_id=? WHERE universidad_id=?", (bua['id'], ans['id']))
+            conn.execute("DELETE FROM ddd_usados  WHERE universidad_id=?", (ans['id'],))
+            conn.execute("DELETE FROM universidades WHERE codigo='ANS'")
+        # Renombrar ANN a "Anáhuac" (quitar "Norte")
+        conn.execute("UPDATE universidades SET nombre='Anáhuac' WHERE codigo='ANN'")
+        conn.commit()
+    except Exception as e:
+        print(f"[DB] Advertencia en migración universidades BUAP/Anáhuac: {e}", file=sys.stderr)
 
     conn.close()
     return get_db_path()
