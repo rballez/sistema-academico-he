@@ -167,7 +167,12 @@ def importar_alumnos_csv(ruta_archivo: str = None, contenido_csv: str = None) ->
             if not ap_paterno or not nombres or not univ_code:
                 errores.append({'fila': i, 'error': 'Datos incompletos (Paterno, Nombre o Universidad vacíos)'})
                 continue
-            univ = conn.execute("SELECT id FROM universidades WHERE codigo=? OR nombre LIKE ?", (univ_code, f'%{univ_code}%')).fetchone()
+            # Buscar primero por código exacto; solo si no hay match, buscar por nombre LIKE.
+            # Evita que 'INT' (Intercambio) haga LIKE sobre 'SA**INT** LUKE' y devuelva la fila
+            # incorrecta cuando hay múltiples coincidencias por id más bajo.
+            univ = conn.execute("SELECT id FROM universidades WHERE codigo=?", (univ_code,)).fetchone()
+            if not univ:
+                univ = conn.execute("SELECT id FROM universidades WHERE nombre LIKE ?", (f'%{univ_code}%',)).fetchone()
             if not univ:
                 errores.append({'fila': i, 'error': f'Universidad no encontrada: {univ_code}'})
                 continue

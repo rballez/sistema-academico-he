@@ -4,22 +4,24 @@
 IMPORTAR_FORMATO_ANTIGUO.PY — Importador de archivos Excel históricos
 Sistema de Gestión Académica — Hospital Escandón
 
-Formato real confirmado:
-
 ROTACIONES.xlsx (simple):
   Fila 1 = encabezados: Nombre | ID | GyO | MI | CIRUGÍA | PEDIATRÍA | FAMILIAR | URGENCIAS
-  Filas 2+: datos.  Valor 0 = No presentó (se omite).
+  Filas 2+: datos.  Valor 0/NP = No presentó (se omite).
 
-EXAMENES.xlsx (compleja, 4 filas de header):
-  Fila 1: Nombre | Escuela | ID | CALIFICACIONES (fusionado) ...
-  Fila 2: (vacío x3) | GINECOLOGÍA Y OBSTETRICIA (x6) | PEDIATRÍA (x6) | ...
-  Fila 3: (vacío x3) | PARCIAL (x3) | FINAL (x3) | PARCIAL (x3) | FINAL (x3) | ...
-  Fila 4: (vacío x3) | MIP 1 | MIP 2 | MAX | MIP 1 | MIP 2 | MAX | ...
+CALIFICACIONES.xlsx (compleja, 4 filas de header):
+  Fila 1: Nombre | Escuela | ID | CALIFICACIONES (fusionado)
+  Fila 2: (vacío x3) | GINECOLOGÍA Y OBSTETRICIA | PEDIATRÍA | CIRUGÍA GENERAL |
+           MEDICINA INTERNA | MEDICINA FAMILIAR - URGENCIAS | TRONCAL
+  Fila 3: (vacío x3) | PARCIAL | FINAL | PARCIAL | FINAL | ... (por materia)
+  Fila 4: (vacío x3) | MIP 1 | MIP 2 | REM | MAX | MIP 1 | MIP 2 | REM | MAX | ...
   Fila 5+: datos.
-  Columna 1=Nombre, 2=Escuela, 3=ID.
-  Por materia hay 6 columnas: Parcial-MIP1, Parcial-MIP2, Parcial-MAX, Final-MIP1, Final-MIP2, Final-MAX
-  "NP" o "-" o 0 = No presentó.
-  Se toma el valor según el grado real del alumno en la BD.
+
+  Por materia: 8 cols = [P-MIP1, P-MIP2, P-REM, P-MAX, F-MIP1, F-MIP2, F-REM, F-MAX]
+  TRONCAL: 1 columna al final (remedial del troncal, afecta todas las materias).
+  REM es igual para PARCIAL y FINAL en la misma materia → se importa solo una vez
+  como tipo_examen='remedial'.
+  MAX se ignora (redundante; se recalcula en el sistema).
+  "NP" / None / 0 = No presentó.
 =============================================================================
 """
 
@@ -104,14 +106,24 @@ ROTACIONES_COL_MAP = {
     8: 'Urgencias',
 }
 
-# Variantes de encabezados (case-insensitive)
+# Variantes de encabezados (case-insensitive).
+# ORDEN IMPORTANTE: claves más largas / específicas PRIMERO para evitar
+# falsos positivos ('MI' está contenido en 'FAMILIAR', 'MEDICINA INTERNA', etc.).
 ROTACIONES_HEADER_MAP = {
-    'GYO': 'GyO', 'G Y O': 'GyO', 'GINECO': 'GyO', 'GINECOLOGÍA': 'GyO', 'GINECOLOGIA': 'GyO',
-    'MI': 'Medicina Interna', 'MEDICINA INTERNA': 'Medicina Interna', 'MED. INTERNA': 'Medicina Interna',
-    'CIRUGÍA': 'Cirugía', 'CIRUGIA': 'Cirugía', 'CIR': 'Cirugía', 'CIRUGÍA GENERAL': 'Cirugía',
+    # Ginecología (debe ir antes que cualquier substring genérico)
+    'GINECOLOGÍA Y OBSTETRICIA': 'GyO', 'GINECOLOGIA Y OBSTETRICIA': 'GyO',
+    'GINECOLOGÍA': 'GyO', 'GINECOLOGIA': 'GyO', 'GINECO': 'GyO', 'G Y O': 'GyO', 'GYO': 'GyO',
+    # Pediatría
     'PEDIATRÍA': 'Pediatría', 'PEDIATRIA': 'Pediatría', 'PEDIA': 'Pediatría',
-    'FAMILIAR': 'Familiar', 'FAM': 'Familiar',
+    # Cirugía
+    'CIRUGÍA GENERAL': 'Cirugía', 'CIRUGIA GENERAL': 'Cirugía',
+    'CIRUGÍA': 'Cirugía', 'CIRUGIA': 'Cirugía',
+    # Familiar ANTES de 'MI' (porque 'MI' ⊂ 'FAMILIAR')
+    'MEDICINA FAMILIAR': 'Familiar', 'FAMILIAR': 'Familiar', 'FAM': 'Familiar',
+    # Urgencias ANTES de 'MI'
     'URGENCIAS': 'Urgencias', 'URG': 'Urgencias',
+    # Medicina Interna — al final para evitar colisión con substrings
+    'MEDICINA INTERNA': 'Medicina Interna', 'MED. INTERNA': 'Medicina Interna', 'MI': 'Medicina Interna',
 }
 
 
@@ -230,13 +242,20 @@ def importar_rotaciones_formato_antiguo(content_b64: str, ciclo_destino: str) ->
 #   Fila 4 (0-indexed 3): MIP 1 / MIP 2 / MAX
 #   Fila 5+ (0-indexed 4+): datos
 
+MATERIAS_TRONCAL = ['Cirugía', 'Medicina Interna', 'Pediatría', 'GyO', 'Urgencias', 'Familiar']
+
+
 def importar_examenes_formato_antiguo(content_b64: str, ciclo_destino: str) -> dict:
     """
-    Importa EXAMENES.xlsx — formato complejo.
-    4 filas de encabezado. Columna 3 (0-idx=2) = ID.
-    Por cada materia hay 6 columnas: P-MIP1, P-MIP2, P-MAX, F-MIP1, F-MIP2, F-MAX.
-    Se toma el valor de la columna MIP 1 o MIP 2 según el grado real del alumno.
-    'NP' o '-' o 0 = No presentó.
+    Importa CALIFICACIONES.xlsx — formato con 8 cols por materia:
+    [P-MIP1, P-MIP2, P-REM, P-MAX, F-MIP1, F-MIP2, F-REM, F-MAX] + col TRONCAL al final.
+
+    Orden de materias: GyO, Pediatría, Cirugía General, Medicina Interna,
+                       Medicina Familiar-Urgencias, Troncal.
+
+    REM es idéntico en PARCIAL y FINAL para la misma materia → solo se importa una vez
+    como tipo_examen='remedial'. MAX se ignora (se recalcula en el sistema).
+    TRONCAL se inserta como tipo_examen='troncal' para las 6 materias.
     """
     wb = _leer_xlsx(content_b64)
     ws = wb.active
@@ -245,30 +264,31 @@ def importar_examenes_formato_antiguo(content_b64: str, ciclo_destino: str) -> d
     if len(rows_list) < 5:
         return {'ok': False, 'error': 'El archivo no tiene suficientes filas.'}
 
-    # Detectar la fila de encabezados de materias
-    # Buscamos la fila que contiene nombres de materias conocidas
-    header_materia_row = 1   # 0-indexed row con materias (fila 2 en Excel)
-    header_tipo_row = 2      # 0-indexed row con PARCIAL/FINAL
-    header_mip_row = 3       # 0-indexed row con MIP 1/MIP 2/MAX
-    data_start_row = 4       # 0-indexed row donde empiezan los datos
+    # Detectar filas de encabezado
+    header_materia_row = 1
+    header_tipo_row    = 2
+    header_mip_row     = 3
+    data_start_row     = 4
 
-    # Detectar automáticamente las filas de encabezado
     for ri, row in enumerate(rows_list[:8]):
         row_str = ' '.join(str(v or '').upper() for v in row)
         if any(k in row_str for k in ['GINECOL', 'GINECO', 'PEDIATR', 'CIRUG', 'MEDICINA INTERNA']):
             header_materia_row = ri
-            header_tipo_row = ri + 1
-            header_mip_row = ri + 2
-            data_start_row = ri + 3
+            header_tipo_row    = ri + 1
+            header_mip_row     = ri + 2
+            data_start_row     = ri + 3
             break
-
-    # Construir mapa de columnas: col_idx → (materia_canónica, tipo_examen, grado_target)
-    # grado_target: 'MIP 1' o 'MIP 2' o 'MAX'
-    col_map = {}  # col_idx (0-based) → {'materia': str, 'tipo': 'parcial'|'final', 'grado': str}
 
     row_mat  = rows_list[header_materia_row]
     row_tipo = rows_list[header_tipo_row] if header_tipo_row < len(rows_list) else []
-    row_mip  = rows_list[header_mip_row]  if header_mip_row < len(rows_list) else []
+    row_mip  = rows_list[header_mip_row]  if header_mip_row  < len(rows_list) else []
+
+    # Construir col_map: col_idx → {materia, tipo_examen, grado}
+    # tipo_examen: 'parcial' | 'final' | 'remedial'
+    # grado: 'MIP 1' | 'MIP 2' | None (para remedial)
+    col_map     = {}
+    troncal_col = None          # columna del TRONCAL
+    rem_seen    = set()         # materias cuyo REM ya fue registrado (evitar duplicados)
 
     current_materia = None
     current_tipo    = None
@@ -278,7 +298,12 @@ def importar_examenes_formato_antiguo(content_b64: str, ciclo_destino: str) -> d
         val_tipo = str(row_tipo[ci] if ci < len(row_tipo) else '').strip().upper()
         val_mip  = str(row_mip[ci]  if ci < len(row_mip)  else '').strip().upper()
 
-        # Actualizar materia si hay un nuevo valor
+        # ── Detectar columna TRONCAL ──────────────────────────────────────────
+        if 'TRONCAL' in val_mat:
+            troncal_col = ci
+            continue
+
+        # ── Actualizar materia si la celda tiene contenido ───────────────────
         if val_mat:
             canon = None
             for key, mat in MAPA_MATERIAS.items():
@@ -288,23 +313,33 @@ def importar_examenes_formato_antiguo(content_b64: str, ciclo_destino: str) -> d
             if canon:
                 current_materia = canon
 
-        # Actualizar tipo si hay un nuevo valor
+        # ── Actualizar tipo (PARCIAL / FINAL) ────────────────────────────────
         if val_tipo in ('PARCIAL', 'FINAL'):
             current_tipo = val_tipo.lower()
 
-        # Si tenemos materia, tipo y mip: registrar columna
-        if current_materia and current_tipo and val_mip in ('MIP 1', 'MIP 2', 'MAX'):
-            col_map[ci] = {
-                'materia': current_materia,
-                'tipo': current_tipo,
-                'grado': val_mip,
-            }
+        if not current_materia or not current_tipo:
+            continue
 
-    if not col_map:
-        return {'ok': False, 'error': '❌ No se pudieron detectar columnas de calificaciones. Verifica que el archivo sea el correcto (EXAMENES.xlsx).'}
+        # ── Registrar columna según el sub-header MIP ────────────────────────
+        if val_mip == 'MIP 1':
+            col_map[ci] = {'materia': current_materia, 'tipo': current_tipo, 'grado': 'MIP 1'}
 
-    # Detectar columna de ID (buscar "ID" o número de 9 dígitos en fila de datos)
-    id_col = 2  # default: columna C (0-indexed)
+        elif val_mip == 'MIP 2':
+            col_map[ci] = {'materia': current_materia, 'tipo': current_tipo, 'grado': 'MIP 2'}
+
+        elif val_mip == 'REM':
+            # REM igual en PARCIAL y FINAL para la misma materia → solo una vez
+            if current_materia not in rem_seen:
+                col_map[ci] = {'materia': current_materia, 'tipo': 'remedial', 'grado': None}
+                rem_seen.add(current_materia)
+
+        # MAX: ignorar (redundante, se recalcula)
+
+    if not col_map and troncal_col is None:
+        return {'ok': False, 'error': '❌ No se detectaron columnas. Verifica que sea CALIFICACIONES.xlsx.'}
+
+    # Columna ID (por defecto col C = índice 2)
+    id_col = 2
     for ci, val in enumerate(rows_list[0]):
         s = str(val or '').strip().upper()
         if re.search(r'\bID\b|\bMIP\b|\bC[OÓ]DIGO\b', s):
@@ -316,8 +351,8 @@ def importar_examenes_formato_antiguo(content_b64: str, ciclo_destino: str) -> d
         alumnos_db = {str(r['mip_id']): r for r in rows_to_list(
             conn.execute("SELECT mip_id, grado FROM alumnos WHERE activo=1").fetchall())}
 
-        insertados = 0
-        omitidos = 0
+        insertados    = 0
+        omitidos      = 0
         no_encontrados = []
 
         for row in rows_list[data_start_row:]:
@@ -335,25 +370,21 @@ def importar_examenes_formato_antiguo(content_b64: str, ciclo_destino: str) -> d
                 omitidos += 1
                 continue
 
-            grado_alumno = alumno['grado']  # 'MIP 1' o 'MIP 2' (grado actual)
+            grado_alumno = alumno['grado']  # 'MIP 1' o 'MIP 2'
 
-            # Importar TODOS los valores MIP1 y MIP2 (no solo el del grado actual).
-            # Esto permite que la tabla de Resultados muestre ambas columnas correctamente.
-            # Se omite la columna MAX (redundante).
+            # ── Calificaciones por materia / tipo / grado ─────────────────────
             for ci, info in col_map.items():
                 if ci >= len(row):
                     continue
-                if info['grado'] == 'MAX':
-                    continue  # ignorar columna MAX, solo queremos MIP1 y MIP2
 
                 val = _safe_float(row[ci])
                 if val is None:
                     continue
-
                 val = min(100.0, val)
-                grado_ref = info['grado']  # 'MIP 1' o 'MIP 2' según la columna del Excel
 
-                # Expandir Urg-Fam en Urgencias + Familiar
+                grado_ref = info['grado'] or grado_alumno  # REM usa el grado actual
+
+                # Urg-Fam se expande a Urgencias + Familiar
                 materias_destino = MATERIAS_URG_FAM if info['materia'] == 'Urg-Fam' else [info['materia']]
                 for mat in materias_destino:
                     conn.execute(
@@ -364,6 +395,21 @@ def importar_examenes_formato_antiguo(content_b64: str, ciclo_destino: str) -> d
                         (id_val, val, val, grado_ref, mat, info['tipo'], ciclo_destino)
                     )
                     insertados += 1
+
+            # ── TRONCAL: insertar una vez para cada materia ───────────────────
+            if troncal_col is not None and troncal_col < len(row):
+                val_t = _safe_float(row[troncal_col])
+                if val_t is not None:
+                    val_t = min(100.0, val_t)
+                    for mat in MATERIAS_TRONCAL:
+                        conn.execute(
+                            """INSERT INTO examenes_raw
+                               (student_id, earned_points, percent_correct, grado_ref,
+                                materia, tipo_examen, ciclo)
+                               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                            (id_val, val_t, val_t, grado_alumno, mat, 'troncal', ciclo_destino)
+                        )
+                        insertados += 1
 
         conn.commit()
         return {
